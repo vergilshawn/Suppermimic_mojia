@@ -39,6 +39,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def run_batch(argv=None):
     p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--raw-out',type=Path,default=ROOT/'data/mojia_raw');p.add_argument('--out',type=Path,default=ROOT/'data/mojia');a=p.parse_args(argv)
     from robot_control.retarget import run
+    from robot_control.runtime.prepare import prepare
     if a.out.exists():raise FileExistsError(a.out)
     names=json.loads((ROOT/'configs/motions.json').read_text());fps=[]
     for name in names:
