@@ -1,8 +1,49 @@
-"""Evaluate command entry point."""
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from robot_control.commands.evaluate import main
+"""Evaluate policies, a checkpoint series, or an existing asynchronous queue."""
+import argparse
+import sys
+from pathlib import Path
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('mode', choices=['single', 'batch', 'worker'])
+    if not argv or argv[0] in ('-h', '--help'):
+        parser.print_help(); return
+    mode = parser.parse_args(argv[:1]).mode
+    if mode == 'worker':
+        from robot_control.runtime.evaluation_worker import main as worker
+        return worker(argv[1:])
+    run = run_single
+    if mode == 'single':
+        return run(argv[1:])
+    p = argparse.ArgumentParser(description='Evaluate checkpoints sequentially with the same dataset and budget.')
+    p.add_argument('--checkpoints', nargs='+', required=True, type=Path)
+    p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--device', default='cuda:0')
+    p.add_argument('--max-steps', type=int)
+    a = p.parse_args(argv[1:])
+    for i, checkpoint in enumerate(a.checkpoints):
+        args = ['--checkpoint', str(checkpoint), '--out', str(a.out / f'{i:03d}_{checkpoint.stem}.json'), '--device', a.device]
+        if a.max_steps is not None: args += ['--max-steps', str(a.max_steps)]
+        run(args)
+
+def run_single(argv=None):
+    import argparse,json
+    from pathlib import Path
+    import torch
+    p=argparse.ArgumentParser();p.add_argument('--checkpoint',required=True,type=Path);p.add_argument('--out',type=Path,required=True);p.add_argument('--device',default='cuda:0');p.add_argument('--max-steps',type=int);a=p.parse_args(argv)
+    torch.set_num_threads(1)
+    from robot_control.runtime.evaluation_worker import load,evaluate
+    cp,env,actor=load(a.checkpoint)
+    if a.device.startswith('cuda'):
+     from robot_control.runtime.gpu_evaluation import evaluate
+    result=evaluate(env,actor,max_steps=a.max_steps,device=a.device) if a.device.startswith('cuda') else evaluate(env,actor,max_steps=a.max_steps)
+    a.out.parent.mkdir(parents=True,exist_ok=True);a.out.write_text(json.dumps(result,indent=2));print(json.dumps({k:v for k,v in result.items() if k!='motions'}))
+
 
 if __name__ == "__main__":
     main()
