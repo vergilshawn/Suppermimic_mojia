@@ -131,30 +131,39 @@ def orientation_error(a,b):
 
 
 class Task(nn.Module):
-    def __init__(self,model,nominal,tracked,qids=None,vids=None,dt=.02):
+    def __init__(self,model,nominal,tracked,qids=None,vids=None,dt=.02,tracked_offsets=None):
         super().__init__();self.layout=RobotLayout(len(nominal));self.dt=float(dt)
         qids=np.asarray(qids if qids is not None else np.arange(7,model.nq),dtype=int)
         self.fk=Kinematics(model,qids,vids);self.tracked=list(tracked)
+        offsets=torch.zeros(len(self.tracked),3) if tracked_offsets is None else torch.tensor(tracked_offsets,dtype=torch.float32)
+        if offsets.shape!=(len(self.tracked),3) or not torch.isfinite(offsets).all():raise ValueError('Invalid tracking-point local offsets')
+        self.register_buffer('tracked_offsets',offsets)
         self.register_buffer('nominal',torch.tensor(nominal,dtype=torch.float32))
         joint_for_q={int(q):i for i,q in enumerate(model.jnt_qposadr)}
         ranges=torch.tensor(model.jnt_range[[joint_for_q[int(q)] for q in qids]],dtype=torch.float32)
         middle,half=ranges.mean(-1),(ranges[:,1]-ranges[:,0])*.45
         self.register_buffer('lower',middle-half);self.register_buffer('upper',middle+half)
 
+    def tracking_kinematics(self,kinematics):
+        p,r,v,w=kinematics;t=self.tracked
+        offset=apply(r[...,t,:,:],self.tracked_offsets)
+        return p[...,t,:]+offset,r[...,t,:,:],v[...,t,:]+torch.linalg.cross(w[...,t,:],offset),w[...,t,:]
+
     def reward(self,state,next_state,action,reference,reference_kinematics=None):
         q,_,last=spans(state);p,r,v,w=self.fk(next_state)
         rp,rr,rv,rw=self.fk(reference) if reference_kinematics is None else reference_kinematics
-        t=self.tracked
+        tp,tr,tv,tw=self.tracking_kinematics((p,r,v,w))
+        rtp,rtr,rtv,rtw=self.tracking_kinematics((rp,rr,rv,rw))
         delta=r[...,0,:,:] @ rr[...,0,:,:].transpose(-1,-2)
         yaw=torch.atan2(delta[...,1,0],delta[...,0,0]);c=yaw.cos();sn=yaw.sin();z=torch.zeros_like(c);one=torch.ones_like(c)
         heading=torch.stack((c,-sn,z,sn,c,z,z,z,one),-1).reshape(*yaw.shape,3,3)
         anchor=torch.cat((p[...,0,:2],rp[...,0,2:3]),-1)
-        aligned_p=anchor[...,None,:]+apply(heading[...,None,:,:],rp-rp[...,0:1,:])
-        aligned_r=heading[...,None,:,:] @ rr
-        terms=(torch.exp(-(p[...,t,:]-aligned_p[...,t,:]).square().sum(-1).mean(-1)/.3**2)
-               +torch.exp(-orientation_error(r[...,t,:,:],aligned_r[...,t,:,:]).mean(-1)/.4**2)
-               +torch.exp(-(v[...,t,:]-rv[...,t,:]).square().sum(-1).mean(-1))
-               +torch.exp(-(w[...,t,:]-rw[...,t,:]).square().sum(-1).mean(-1)/3.14**2)
+        aligned_p=anchor[...,None,:]+apply(heading[...,None,:,:],rtp-rp[...,0:1,:])
+        aligned_r=heading[...,None,:,:] @ rtr
+        terms=(torch.exp(-(tp-aligned_p).square().sum(-1).mean(-1)/.3**2)
+               +torch.exp(-orientation_error(tr,aligned_r).mean(-1)/.4**2)
+               +torch.exp(-(tv-rtv).square().sum(-1).mean(-1))
+               +torch.exp(-(tw-rtw).square().sum(-1).mean(-1)/3.14**2)
                +.5*torch.exp(-(p[...,0,:]-rp[...,0,:]).square().sum(-1)/.3**2)
                +.5*torch.exp(-orientation_error(r[...,0,:,:],rr[...,0,:,:])/.4**2))
         limits=(F.relu(self.lower-next_state[...,q])+F.relu(next_state[...,q]-self.upper)).sum(-1)

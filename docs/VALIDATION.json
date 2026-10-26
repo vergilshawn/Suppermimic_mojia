@@ -1,23 +1,610 @@
 {
-  "robot": "mojia_v3_8",
-  "model": "short arm; no support rods; elbows nominal zero",
-  "config": "configs/train.json",
-  "iterations": 50000,
-  "prepared_clips": 40,
-  "prepared_frames": 441120,
-  "dataset_contract_checked": true,
-  "gpu_verification": {
-    "device": "cuda:0",
-    "completed_iterations": 1,
-    "status": "verification_budget_complete",
-    "model_loss": 30.552448272705078,
-    "scope": "Full training recipe, warmup and one world-model iteration; policy updates start after 500 world-model-only iterations."
+  "date": "2026-10-26",
+  "scope": {
+    "mojia_and_g1_fk_samples_each": 320,
+    "clips_each": 40,
+    "full_mojia_manifest_loaded_and_hashed": true,
+    "full_geometry_data_audit": "runs/mojia_audit/report.json",
+    "hardware_actuation_tested": false
   },
-  "unit_tests_passed": 5,
-  "formal_training_started": false,
-  "known_reference_limitations": {
-    "self_penetration_over_2cm_frame_fraction": 0.014501722887196228,
-    "max_floor_lift_m": 0.397396981716156
+  "mojia_coordinates": {
+    "robot": "mojia",
+    "samples": 320,
+    "errors": {
+      "position": 1.4661116054526246e-06,
+      "rotation_matrix": 3.717023298044353e-07,
+      "linear_velocity": 3.285187961443725e-06,
+      "angular_velocity": 3.4188711239835357e-06,
+      "root_linear_velocity_world": 4.440892098500626e-16,
+      "root_angular_velocity_body": 2.6645352591003757e-15
+    },
+    "root_body": "base_link",
+    "torso_body": "lumbar_yaw",
+    "torso_id": 2,
+    "tracked": [
+      "base_link",
+      "lumbar_yaw",
+      "left_hip_roll",
+      "left_knee_pitch",
+      "left_ankle_roll",
+      "right_hip_roll",
+      "right_knee_pitch",
+      "right_ankle_roll",
+      "left_shoulder_roll",
+      "left_elbow_pitch",
+      "left_elbow_yaw",
+      "right_shoulder_roll",
+      "right_elbow_pitch",
+      "right_elbow_yaw"
+    ],
+    "canonical_joint_order_matches_simulator": false,
+    "joint_names": [
+      "left_hip_pitch_joint",
+      "lumbar_yaw_joint",
+      "right_hip_pitch_joint",
+      "left_hip_roll_joint",
+      "left_shoulder_pitch_joint",
+      "right_shoulder_pitch_joint",
+      "right_hip_roll_joint",
+      "left_hip_yaw_joint",
+      "left_shoulder_roll_joint",
+      "right_shoulder_roll_joint",
+      "right_hip_yaw_joint",
+      "left_knee_pitch_joint",
+      "left_shoulder_yaw_joint",
+      "right_shoulder_yaw_joint",
+      "right_knee_pitch_joint",
+      "left_ankle_pitch_joint",
+      "left_elbow_pitch_joint",
+      "right_elbow_pitch_joint",
+      "right_ankle_pitch_joint",
+      "left_ankle_roll_joint",
+      "left_elbow_yaw_joint",
+      "right_elbow_yaw_joint",
+      "right_ankle_roll_joint"
+    ],
+    "qpos_addresses": [
+      18,
+      7,
+      24,
+      19,
+      8,
+      13,
+      25,
+      20,
+      9,
+      14,
+      26,
+      21,
+      10,
+      15,
+      27,
+      22,
+      11,
+      16,
+      28,
+      23,
+      12,
+      17,
+      29
+    ],
+    "dimensions": {
+      "state": 82,
+      "observation": 75,
+      "context": 27,
+      "goal": 62,
+      "dynamics_output": 58
+    }
   },
-  "retained_g1_checkpoint": "checkpoints/g1/best.pt"
+  "g1_coordinates": {
+    "robot": "g1",
+    "samples": 320,
+    "errors": {
+      "position": 1.2518691203666776e-06,
+      "rotation_matrix": 3.876569925065354e-07,
+      "linear_velocity": 1.222512553855637e-06,
+      "angular_velocity": 4.074678310317381e-06,
+      "root_linear_velocity_world": 4.440892098500626e-16,
+      "root_angular_velocity_body": 5.329070518200751e-15
+    },
+    "root_body": "pelvis",
+    "torso_body": "torso_link",
+    "torso_id": 16,
+    "tracked": [
+      "pelvis",
+      "left_hip_roll_link",
+      "left_knee_link",
+      "left_ankle_roll_link",
+      "right_hip_roll_link",
+      "right_knee_link",
+      "right_ankle_roll_link",
+      "torso_link",
+      "left_shoulder_roll_link",
+      "left_elbow_link",
+      "left_wrist_yaw_link",
+      "right_shoulder_roll_link",
+      "right_elbow_link",
+      "right_wrist_yaw_link"
+    ],
+    "canonical_joint_order_matches_simulator": true,
+    "joint_names": [
+      "left_hip_pitch_joint",
+      "left_hip_roll_joint",
+      "left_hip_yaw_joint",
+      "left_knee_joint",
+      "left_ankle_pitch_joint",
+      "left_ankle_roll_joint",
+      "right_hip_pitch_joint",
+      "right_hip_roll_joint",
+      "right_hip_yaw_joint",
+      "right_knee_joint",
+      "right_ankle_pitch_joint",
+      "right_ankle_roll_joint",
+      "waist_yaw_joint",
+      "waist_roll_joint",
+      "waist_pitch_joint",
+      "left_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",
+      "left_shoulder_yaw_joint",
+      "left_elbow_joint",
+      "left_wrist_roll_joint",
+      "left_wrist_pitch_joint",
+      "left_wrist_yaw_joint",
+      "right_shoulder_pitch_joint",
+      "right_shoulder_roll_joint",
+      "right_shoulder_yaw_joint",
+      "right_elbow_joint",
+      "right_wrist_roll_joint",
+      "right_wrist_pitch_joint",
+      "right_wrist_yaw_joint"
+    ],
+    "qpos_addresses": [
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35
+    ],
+    "dimensions": {
+      "state": 100,
+      "observation": 93,
+      "context": 33,
+      "goal": 74,
+      "dynamics_output": 70
+    }
+  },
+  "feature_and_task_checks": {
+    "future_window": "t+1..t+10 matches G1",
+    "observation_yaw_translation_invariance_max_error": 1.1920928955078125e-07,
+    "goal_yaw_translation_invariance_max_error": 1.0132789611816406e-06,
+    "reward_global_transform_invariance_max_error": 9.812414646148682e-06,
+    "dynamics_feature_invariance_max_error": 3.5762786865234375e-07,
+    "reward_gradients_finite": true,
+    "layout_output_equals_network": 58,
+    "reset_canonical_joint_error": 0.0,
+    "torso_com_randomization_only_named_torso": true,
+    "hand_tip_vs_mujoco_max_error_m": 1.050428366511369e-06
+  },
+  "retarget_hand_endpoint_parity": {
+    "samples": 40,
+    "max_position_error_m": 1.0365867293415931e-06
+  },
+  "gpu_cpu_reference_parity": {
+    "reset_max_error": 0.0,
+    "steps": [
+      {
+        "step": 1,
+        "root_position_max_m": 0.0002388283610343933,
+        "joint_position_max_rad": 0.11047548055648804,
+        "velocity_max": 8.429018020629883,
+        "cpu_max_contacts": 8,
+        "gpu_max_contacts": 5
+      },
+      {
+        "step": 2,
+        "root_position_max_m": 0.0025224387645721436,
+        "joint_position_max_rad": 0.13102677464485168,
+        "velocity_max": 12.389959335327148,
+        "cpu_max_contacts": 8,
+        "gpu_max_contacts": 5
+      },
+      {
+        "step": 3,
+        "root_position_max_m": 0.002467036247253418,
+        "joint_position_max_rad": 0.19687333703041077,
+        "velocity_max": 10.3898344039917,
+        "cpu_max_contacts": 8,
+        "gpu_max_contacts": 6
+      }
+    ]
+  },
+  "gpu_cpu_isolation": [
+    {
+      "case": "free_flight",
+      "steps": [
+        {
+          "root_position_max_m": 2.384185791015625e-07,
+          "joint_position_max_rad": 2.9802322387695312e-08,
+          "velocity_max": 7.860362529754639e-07,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        },
+        {
+          "root_position_max_m": 2.384185791015625e-07,
+          "joint_position_max_rad": 5.960464477539063e-08,
+          "velocity_max": 1.0775402188301086e-06,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        },
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 5.960464477539063e-08,
+          "velocity_max": 1.2405216693878174e-06,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        }
+      ]
+    },
+    {
+      "case": "free_flight_randomized_com",
+      "steps": [
+        {
+          "root_position_max_m": 2.384185791015625e-07,
+          "joint_position_max_rad": 2.9802322387695312e-08,
+          "velocity_max": 7.078051567077637e-07,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        },
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 5.960464477539063e-08,
+          "velocity_max": 8.381903171539307e-07,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        },
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 5.960464477539063e-08,
+          "velocity_max": 1.0728836059570312e-06,
+          "cpu_contacts_max": 0,
+          "gpu_contacts_max": 0
+        }
+      ]
+    },
+    {
+      "case": "nominal_ground_contact",
+      "steps": [
+        {
+          "root_position_max_m": 1.1861324310302734e-05,
+          "joint_position_max_rad": 0.0003290774184279144,
+          "velocity_max": 0.06581562757492065,
+          "cpu_contacts_max": 2,
+          "gpu_contacts_max": 6
+        },
+        {
+          "root_position_max_m": 0.00013172626495361328,
+          "joint_position_max_rad": 0.003912822343409061,
+          "velocity_max": 0.2385929524898529,
+          "cpu_contacts_max": 2,
+          "gpu_contacts_max": 6
+        },
+        {
+          "root_position_max_m": 0.00036650896072387695,
+          "joint_position_max_rad": 0.009030844084918499,
+          "velocity_max": 0.3066350221633911,
+          "cpu_contacts_max": 2,
+          "gpu_contacts_max": 7
+        }
+      ]
+    }
+  ],
+  "g1_gpu_cpu_parity": [
+    {
+      "case": "reference_midpoints",
+      "steps": [
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 9.611248970031738e-06,
+          "velocity_max": 0.0003757476806640625
+        },
+        {
+          "root_position_max_m": 1.430511474609375e-06,
+          "joint_position_max_rad": 0.0004977807402610779,
+          "velocity_max": 0.09955430030822754
+        },
+        {
+          "root_position_max_m": 0.00010657310485839844,
+          "joint_position_max_rad": 0.011537432670593262,
+          "velocity_max": 0.1273343563079834
+        }
+      ]
+    },
+    {
+      "case": "free_flight",
+      "steps": [
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 1.1920928955078125e-07,
+          "velocity_max": 1.237727701663971e-06
+        },
+        {
+          "root_position_max_m": 4.76837158203125e-07,
+          "joint_position_max_rad": 1.1920928955078125e-07,
+          "velocity_max": 1.862645149230957e-06
+        },
+        {
+          "root_position_max_m": 7.152557373046875e-07,
+          "joint_position_max_rad": 1.7881393432617188e-07,
+          "velocity_max": 1.8104910850524902e-06
+        }
+      ]
+    }
+  ],
+  "contact_difference_examples": [
+    {
+      "clip": "fight1_subject3",
+      "frame": 6122,
+      "max_joint_difference_rad": 0.19687333703041077,
+      "joint": "right_knee_pitch_joint",
+      "initial_contacts": [
+        {
+          "pair": [
+            "left_knee_pitch_collision_0",
+            "right_hip_yaw_collision_0"
+          ],
+          "depth_m": 0.07454525736065756
+        },
+        {
+          "pair": [
+            "left_knee_pitch_collision_0",
+            "right_hip_yaw_collision_0"
+          ],
+          "depth_m": 0.022867374916317094
+        },
+        {
+          "pair": [
+            "left_knee_pitch_collision_0",
+            "right_hip_yaw_collision_0"
+          ],
+          "depth_m": 0.05566065288196911
+        },
+        {
+          "pair": [
+            "right_hip_yaw_collision_0",
+            "left_ankle_roll_collision_0"
+          ],
+          "depth_m": 0.02081603591680052
+        }
+      ]
+    },
+    {
+      "clip": "walk2_subject3",
+      "frame": 5954,
+      "max_joint_difference_rad": 0.06720022857189178,
+      "joint": "right_ankle_roll_joint",
+      "initial_contacts": [
+        {
+          "pair": [
+            "right_shoulder_yaw_collision_0",
+            "right_elbow_yaw_collision_0"
+          ],
+          "depth_m": 0.004570354421831658
+        },
+        {
+          "pair": [
+            "right_shoulder_yaw_collision_0",
+            "right_elbow_yaw_collision_0"
+          ],
+          "depth_m": 0.004570354421831658
+        }
+      ]
+    },
+    {
+      "clip": "sprint1_subject2",
+      "frame": 6827,
+      "max_joint_difference_rad": 0.04006496071815491,
+      "joint": "left_ankle_roll_joint",
+      "initial_contacts": []
+    },
+    {
+      "clip": "sprint1_subject4",
+      "frame": 6827,
+      "max_joint_difference_rad": 0.02815062552690506,
+      "joint": "left_ankle_roll_joint",
+      "initial_contacts": []
+    },
+    {
+      "clip": "dance2_subject1",
+      "frame": 5642,
+      "max_joint_difference_rad": 0.027334704995155334,
+      "joint": "left_hip_yaw_joint",
+      "initial_contacts": []
+    },
+    {
+      "clip": "jumps1_subject1",
+      "frame": 6111,
+      "max_joint_difference_rad": 0.02529478818178177,
+      "joint": "right_ankle_roll_joint",
+      "initial_contacts": []
+    },
+    {
+      "clip": "fallAndGetUp1_subject4",
+      "frame": 4205,
+      "max_joint_difference_rad": 0.022404465824365616,
+      "joint": "right_ankle_roll_joint",
+      "initial_contacts": []
+    },
+    {
+      "clip": "walk1_subject2",
+      "frame": 6532,
+      "max_joint_difference_rad": 0.021674342453479767,
+      "joint": "right_ankle_roll_joint",
+      "initial_contacts": []
+    }
+  ],
+  "configuration_differences": {
+    "actuator_delay_steps": {
+      "g1": null,
+      "mojia": 0
+    },
+    "assets": {
+      "g1": "data/g1",
+      "mojia": "data/mojia"
+    },
+    "clean_collection_fraction": {
+      "g1": null,
+      "mojia": 0.5
+    },
+    "deviations": {
+      "g1": [
+        "Local G1 physical asset and 74/frame relative goal retained; not exact upstream encoding",
+        "CPU replay retained until GPU memory profiling",
+        "Unfiltered 40 LAFAN clips; no full BONES claim",
+        "70 local state increments and running normalization adapted to local body-angular-velocity convention"
+      ],
+      "mojia": null
+    },
+    "dof": {
+      "g1": null,
+      "mojia": 23
+    },
+    "iterations": {
+      "g1": 100000,
+      "mojia": 50000
+    },
+    "lr_decay_iterations": {
+      "g1": 250000,
+      "mojia": 50000
+    },
+    "max_episode_steps": {
+      "g1": null,
+      "mojia": 500
+    },
+    "observation_noise": {
+      "g1": null,
+      "mojia": true
+    },
+    "profile": {
+      "g1": "g1_motion",
+      "mojia": "mojia_motion"
+    },
+    "regression_completion_drop": {
+      "g1": null,
+      "mojia": 0.2
+    },
+    "regression_patience": {
+      "g1": null,
+      "mojia": 3
+    },
+    "regression_return_drop": {
+      "g1": null,
+      "mojia": 0.15
+    },
+    "reset_state_noise": {
+      "g1": null,
+      "mojia": true
+    },
+    "schema": {
+      "g1": 5,
+      "mojia": "mojia_ndof_v6"
+    },
+    "smoke_test": {
+      "g1": null,
+      "mojia": false
+    }
+  },
+  "fixes": [
+    "Shared future window t+1..t+10 in collector/BPTT/CPU-GPU evaluation/validation/render",
+    "Layout and network output both 58; removed contradictory contract override",
+    "Named root/torso, body-name order validation and explicit tracking-point offsets",
+    "Hand tip positions/velocities include local offset and omega cross offset; align with retarget hand targets",
+    "Root-distance metrics use vector Euclidean RMS consistently; optional GPU keypoint and torso errors",
+    "CPU inference action clamp matches training and GPU inference",
+    "New script-entry training processes are detected by conflict guard",
+    "GPU policy trajectory rendering supported explicitly"
+  ],
+  "verification": {
+    "unit_tests_passed": 9,
+    "cpu_smoke_completed_iterations": 2,
+    "gpu_full_recipe_check_completed_iterations": 1,
+    "gpu_full_recipe_check_status": "verification_budget_complete",
+    "gpu_check_policy_updates": 0,
+    "gpu_check_scope": "World-model warmup and one update; CPU smoke includes policy BPTT",
+    "detailed_gpu_evaluation": {
+      "detailed_metrics": true,
+      "root_metric_definition": "sqrt(mean(sum_xyz(position_error**2))); world body-origin metres",
+      "motions": [
+        {
+          "clip": "SYNTHETIC_STANDING_SMOKE_ONLY",
+          "steps": 3,
+          "fall": false,
+          "completed": false,
+          "normalized_return": 0.021380003541707993,
+          "joint_rmse_rad": 0.014018322341144085,
+          "root_rmse_m": 0.007132724858820438,
+          "root_position_rmse_m": 0.007132724858820438,
+          "budget_limited": true,
+          "tracked_keypoint_position_rmse_m": 0.0070426855236291885,
+          "torso_orientation_rmse_rad": 0.0026595271192491055
+        }
+      ],
+      "normalized_return": 0.021380003541707993,
+      "completion_rate": 0.0,
+      "evaluation_is_full": false,
+      "action_noise": 0,
+      "observation_noise": false
+    },
+    "gpu_policy_render": {
+      "checkpoint": "runs/_contract_smoke/latest.pt",
+      "physics_device": "cuda:0",
+      "sha256": "2d0cf56675a9977f88182eddc92ffd4c1968a65630308901a2becd9e64f4302c",
+      "width": 320,
+      "height": 180,
+      "fps": 50.0,
+      "results": [
+        {
+          "clip": "SYNTHETIC_STANDING_SMOKE_ONLY",
+          "rendered_frames": 3,
+          "seconds": 0.06,
+          "fall": false,
+          "completed": false,
+          "budget_limited": true
+        }
+      ]
+    },
+    "formal_training_started": false
+  },
+  "known_limitations": [
+    "GPU/CPU contact responses are not equivalent; reference-midpoint tests diverge most at deeply self-penetrating poses",
+    "Residual leg collisions and up to 39.7cm floor lifts remain in unchanged reference motions",
+    "Real IMU mounting frame and moving torso-to-root transform not verified; root state must be base_link, not torso pose",
+    "Mojia LR cosine decay is 50000 vs G1 250000; this is an explicit recipe difference",
+    "Completion means no height/tilt termination across clip; it does not establish low tracking error or dynamic/hardware feasibility"
+  ],
+  "tracking_point_definition": "configs/robot.json:tracking_points",
+  "joint_axis_definition": "Named axes in assets/robots/mojia/urdf/robot.urdf; no G1 axis substitution"
 }

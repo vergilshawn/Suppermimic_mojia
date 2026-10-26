@@ -43,6 +43,14 @@ def heading_rotation(state):
     return torch.stack((c, -s, zero, s, c, zero, zero, zero, one), -1).reshape(*c.shape, 3, 3)
 
 
+def motion_future(references, clips, frames, count):
+    """Goals at t+1 through t+count; shared by collection, BPTT and evaluation."""
+    device = references.states.device
+    frames = torch.as_tensor(frames, device=device, dtype=torch.long)
+    clips = torch.as_tensor(clips, device=device, dtype=torch.long)
+    return references[clips[..., None], frames[..., None]+torch.arange(1, count+1, device=device)]
+
+
 def motion_goal_features(state, future_states):
     """2N+16/frame; relative XY and heading errors are observable to the actor.
 

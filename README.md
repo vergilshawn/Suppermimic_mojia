@@ -79,3 +79,12 @@ Video dependencies: `pip install -e '.[visualization]'`.
 Datasets, weights and run outputs remain local and are excluded from Git.
 See [data preparation](docs/DATA.md), [model status](docs/MODELS.md),
 [licenses and attribution](THIRD_PARTY_NOTICES.md).
+
+## Robot contract checks
+
+See [G1/Mojia coordinate, keypoint and training audit](docs/ROBOT_CONTRACT.md).
+The active contract uses explicit root/torso names, distal hand points, and
+future references t+1..t+10. GPU policy rendering supports `--device cuda:0`;
+GPU evaluation supports `--detailed` keypoint and torso metrics. CPU contact
+trajectories can differ materially from GPU trajectories, especially at reference
+self-penetration. These remaining limitations are documented in the audit.

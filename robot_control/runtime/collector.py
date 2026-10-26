@@ -76,7 +76,8 @@ class VectorCollector:
                             (self.lengths[clips]-1-frames).clamp_min(0).float()*.02,
                             source.float(),elapsed.float()/250.),-1)
     def future(self,clips,frames):
-        return self.references[clips[:,None],frames[:,None]+torch.arange(self.layout.future,device=self.device)]
+        from .interfaces import motion_future
+        return motion_future(self.references,clips,frames,self.layout.future)
     @torch.no_grad()
     def reset(self,ids):
         if ids.numel()==0:return

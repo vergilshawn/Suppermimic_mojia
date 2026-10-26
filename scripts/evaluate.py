@@ -25,17 +25,19 @@ def main(argv=None):
     p.add_argument('--out', type=Path, required=True)
     p.add_argument('--device', default='cuda:0')
     p.add_argument('--max-steps', type=int)
+    p.add_argument('--detailed', action='store_true', help='Include full-rate GPU keypoint and torso metrics')
     a = p.parse_args(argv[1:])
     for i, checkpoint in enumerate(a.checkpoints):
         args = ['--checkpoint', str(checkpoint), '--out', str(a.out / f'{i:03d}_{checkpoint.stem}.json'), '--device', a.device]
         if a.max_steps is not None: args += ['--max-steps', str(a.max_steps)]
+        if a.detailed: args += ['--detailed']
         run(args)
 
 def run_single(argv=None):
     import argparse,json
     from pathlib import Path
     import torch
-    p=argparse.ArgumentParser();p.add_argument('--checkpoint',required=True,type=Path);p.add_argument('--out',type=Path,required=True);p.add_argument('--device',default='cuda:0');p.add_argument('--max-steps',type=int);a=p.parse_args(argv)
+    p=argparse.ArgumentParser();p.add_argument('--checkpoint',required=True,type=Path);p.add_argument('--out',type=Path,required=True);p.add_argument('--device',default='cuda:0');p.add_argument('--max-steps',type=int);p.add_argument('--detailed',action='store_true');a=p.parse_args(argv)
     torch.set_num_threads(1)
     from robot_control.runtime.train import make_environment,make_networks,source_hashes
     cp=torch.load(a.checkpoint,map_location='cpu',weights_only=True);env=make_environment(cp['config'])
@@ -44,7 +46,7 @@ def run_single(argv=None):
     if a.device.startswith('cuda'):
      from robot_control.runtime.physics import WarpPhysics
      from robot_control.runtime.evaluation_worker import evaluate
-     result=evaluate(env,actor,tasks,WarpPhysics(env,len(env.lengths),device=a.device),a.device,a.max_steps)
+     result=evaluate(env,actor,tasks,WarpPhysics(env,len(env.lengths),device=a.device),a.device,a.max_steps,detailed=a.detailed)
     else:
      from robot_control.runtime.evaluate import physical_evaluation
      result=physical_evaluation(env,actor,tasks,max_steps=a.max_steps)

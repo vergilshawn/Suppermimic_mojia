@@ -32,7 +32,12 @@ def quat_multiply(a,b):
 
 
 def imu_to_body(world_from_imu_wxyz, angular_velocity_imu, body_from_imu_wxyz):
-    """The mounting quaternion is required explicitly, never inferred from IMU data."""
+    """Convert a rigidly mounted IMU into its mounting body's coordinates.
+
+    This does not convert a moving torso IMU into the base_link root frame:
+    that requires waist joint kinematics and relative angular-velocity removal.
+    The mounting quaternion must be supplied, not inferred from IMU data.
+    """
     r=quaternion_matrix(body_from_imu_wxyz)
     quaternion_matrix(world_from_imu_wxyz)
     b=np.asarray(body_from_imu_wxyz,float); b=b/np.linalg.norm(b)

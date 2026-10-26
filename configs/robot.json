@@ -319,5 +319,135 @@
   "elbow_calibration": "CAD bent elbow is coordinate zero; straight-elbow TPOSE calibration uses q=+pi/2 and abducted shoulders; output joint coordinates are not offset.",
   "support_rods": {
     "enabled": false
-  }
+  },
+  "root_body": "base_link",
+  "torso_body": "lumbar_yaw",
+  "tracking_points": [
+    {
+      "name": "base_link",
+      "body": "base_link",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "lumbar_yaw",
+      "body": "lumbar_yaw",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_hip_roll",
+      "body": "left_hip_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_knee_pitch",
+      "body": "left_knee_pitch",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_ankle_roll",
+      "body": "left_ankle_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_hip_roll",
+      "body": "right_hip_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_knee_pitch",
+      "body": "right_knee_pitch",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_ankle_roll",
+      "body": "right_ankle_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_shoulder_roll",
+      "body": "left_shoulder_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_elbow_pitch",
+      "body": "left_elbow_pitch",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "left_hand_tip",
+      "body": "left_elbow_yaw",
+      "offset_local_m": [
+        0.1384,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_shoulder_roll",
+      "body": "right_shoulder_roll",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_elbow_pitch",
+      "body": "right_elbow_pitch",
+      "offset_local_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "name": "right_hand_tip",
+      "body": "right_elbow_yaw",
+      "offset_local_m": [
+        0.1384,
+        0.0,
+        0.0
+      ]
+    }
+  ]
 }

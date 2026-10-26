@@ -1,3 +1,4 @@
+from .interfaces import motion_future
 """Independent GPU evaluation; no action/observation noise, full clips, immutable snapshots."""
 import argparse,json,os,time
 from pathlib import Path
@@ -5,20 +6,21 @@ import numpy as np
 import torch
 from .train import make_environment,make_networks,atomic_json,source_hashes
 from .physics import WarpPhysics
-from .kernel import proprio,spans
+from .kernel import proprio,spans,orientation_error
 from .regression import RegressionGuard
 
 @torch.no_grad()
-def evaluate(env,actor,tasks,physics,device,max_steps=None):
+def evaluate(env,actor,tasks,physics,device,max_steps=None,detailed=False):
     refs=env.references.to(device);n=len(env.lengths);ids=torch.arange(n,device=device)
     lengths=torch.tensor(env.lengths,device=device);state=refs[ids,0].clone();state[:,spans(state)[2]]=0
     ctx=torch.zeros(n,env.layout.context,device=device);ctx[:,0]=1
     physics.reset(ids,state,ctx);history=proprio(state,tasks.nominal,ctx)[:,None].repeat(1,env.layout.history,1)
     active=torch.ones(n,device=device,dtype=torch.bool);fallen=~active;counts=torch.zeros(n,device=device,dtype=torch.long)
     ret=torch.zeros(n,device=device);joint_error=ret.clone();root_error=ret.clone()
+    keypoint_error=ret.clone();torso_error=ret.clone()
     budget=int(lengths.max())-1 if max_steps is None else min(max_steps,int(lengths.max())-1)
     for frame in range(budget):
-        future=refs[ids[:,None],frame+torch.arange(env.layout.future,device=device)[None]]
+        future=motion_future(refs,ids,frame,env.layout.future)
         action=actor(history,future,state).clamp(-20,20);action[~active]=0
         nxt,_=physics.step(action);ref=refs[ids,frame+1]
         finite=torch.isfinite(nxt).all(-1);bad=tasks.termination(nxt,ref,False).bool()|~finite
@@ -27,6 +29,11 @@ def evaluate(env,actor,tasks,physics,device,max_steps=None):
         ret+=torch.where(active,reward,0);counts+=active
         joint_error+=torch.where(active,(nxt[:,13:36]-ref[:,13:36]).square().mean(-1),0)
         root_error+=torch.where(active,(nxt[:,:3]-ref[:,:3]).square().sum(-1),0)
+        if detailed:
+            fk=tasks.fk(nxt);rfk=tasks.fk(ref)
+            points=tasks.base.tracking_kinematics(fk)[0];rpoints=tasks.base.tracking_kinematics(rfk)[0]
+            keypoint_error+=torch.where(active,(points-rpoints).square().sum(-1).mean(-1),0)
+            torso_error+=torch.where(active,orientation_error(fk[1][:,tasks.torso_index],rfk[1][:,tasks.torso_index]),0)
         fallen|=active&bad;active&=~bad & (frame+1<lengths-1)
         state=nxt;history=torch.cat((history[:,1:],proprio(state,tasks.nominal,ctx)[:,None]),1)
         if not active.any():break
@@ -35,8 +42,12 @@ def evaluate(env,actor,tasks,physics,device,max_steps=None):
         if len(dead):physics.reset(dead,refs[dead,0],ctx[dead])
     motion=[]
     for i,name in enumerate(env.clip_names):
-        steps=int(counts[i]);motion.append(dict(clip=name,steps=steps,fall=bool(fallen[i]),completed=bool(not fallen[i] and steps==env.lengths[i]-1),normalized_return=float(ret[i]/(.1*(env.lengths[i]-1))),joint_rmse_rad=float((joint_error[i]/max(steps,1)).sqrt()),root_rmse_m=float((root_error[i]/max(steps,1)).sqrt())))
-    return dict(motions=motion,normalized_return=float(np.mean([r['normalized_return'] for r in motion])),completion_rate=float(np.mean([r['completed'] for r in motion])),evaluation_is_full=max_steps is None,action_noise=0,observation_noise=False)
+        steps=int(counts[i]);motion.append(dict(clip=name,steps=steps,fall=bool(fallen[i]),completed=bool(not fallen[i] and steps==env.lengths[i]-1),normalized_return=float(ret[i]/(5*env.control['control_dt']*(env.lengths[i]-1))),joint_rmse_rad=float((joint_error[i]/max(steps,1)).sqrt()),root_rmse_m=float((root_error[i]/max(steps,1)).sqrt()),root_position_rmse_m=float((root_error[i]/max(steps,1)).sqrt()),budget_limited=bool(not fallen[i] and steps<env.lengths[i]-1)))
+    if detailed:
+        for i,row in enumerate(motion):
+            row['tracked_keypoint_position_rmse_m']=float((keypoint_error[i]/max(int(counts[i]),1)).sqrt())
+            row['torso_orientation_rmse_rad']=float((torso_error[i]/max(int(counts[i]),1)).sqrt())
+    return dict(detailed_metrics=detailed,root_metric_definition='sqrt(mean(sum_xyz(position_error**2))); world body-origin metres',motions=motion,normalized_return=float(np.mean([r['normalized_return'] for r in motion])),completion_rate=float(np.mean([r['completed'] for r in motion])),evaluation_is_full=not any(r['budget_limited'] for r in motion),action_noise=0,observation_noise=False)
 
 def main(argv=None):
     p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True);p.add_argument('--device',default='cuda:0');a=p.parse_args(argv)

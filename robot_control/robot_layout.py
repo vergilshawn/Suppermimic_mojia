@@ -26,8 +26,8 @@ class RobotLayout:
     velocity, joint positions, joint velocities, previous executed actions.
     Context: friction, N calibration offsets, and 3 torso COM offsets.
     Goal: q, dq, height, relative rotation6D, local v/w, relative root xyz.
-    Dynamics: local features -> root/joint velocity increments; pose is
-    integrated analytically. Quantities retain their existing physical units.
+    Dynamics: local features -> independent root/joint pose and velocity
+    increments; orientation is updated with a quaternion exponential. Quantities retain their existing physical units.
     """
 
     dof: int
@@ -61,7 +61,7 @@ class RobotLayout:
 
     @property
     def dynamics_output(self) -> int:
-        return 6 + self.dof
+        return 12 + 2 * self.dof
 
     @property
     def motion_encoder_input(self) -> int:
@@ -113,7 +113,7 @@ class RobotLayout:
             "motion_critic_input", "velocity_critic_input",
         )
         return {
-            "schema": "local_v3_ndof_draft",
+            "schema": "mojia_local_increment_v1",
             "dof": self.dof,
             "history": self.history,
             "future": self.future,

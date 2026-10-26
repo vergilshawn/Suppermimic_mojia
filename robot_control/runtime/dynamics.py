@@ -24,11 +24,11 @@ class ConsistentDynamics(nn.Module):
         super().__init__()
         self.layout=layout or RobotLayout(23);n=self.layout.dof
         from .normalization import RunningNorm
-        self.in_norm=RunningNorm(self.layout.dynamics_input);self.out_norm=RunningNorm(12+2*n,eps=1e-4)
+        self.in_norm=RunningNorm(self.layout.dynamics_input);self.out_norm=RunningNorm(self.layout.dynamics_output,eps=1e-4)
         layers=[];n=self.layout.dynamics_input
         for width in widths:
             layers.extend((nn.Linear(n,width),nn.LayerNorm(width),nn.SiLU()));n=width
-        layers.append(nn.Linear(n,12+2*self.layout.dof));self.net=nn.Sequential(*layers)
+        layers.append(nn.Linear(n,self.layout.dynamics_output));self.net=nn.Sequential(*layers)
         nn.init.zeros_(self.net[-1].weight);nn.init.zeros_(self.net[-1].bias)
         self.register_buffer('floor',torch.tensor([.003]*3+[.005]*3+[.02]*3+[.05]*3+[.003]*self.layout.dof+[.05]*self.layout.dof))
     def features(self,state,action,context):

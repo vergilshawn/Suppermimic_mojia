@@ -14,6 +14,7 @@ def main(argv=None):
     r.add_argument('--motion', required=True, nargs='+', help='Exact dataset clip names')
     r.add_argument('--out', required=True, type=Path)
     r.add_argument('--seconds', type=float, default=12)
+    r.add_argument('--device', default='cpu', help='Policy physics: cpu or cuda:0; use cuda:0 to match training')
     r.add_argument('--width', type=int, default=1920)
     r.add_argument('--height', type=int, default=1080)
     ref = sub.add_parser('reference', help='Play prepared references kinematically using the robot model; no policy needed.')
@@ -67,9 +68,13 @@ def render(a):
         from robot_control.runtime.physics import CPUVectorPhysics
         env = make_environment(cp['config'])
         if cp['contract'] != env.contract: raise ValueError('Robot/data contract mismatch')
-        actor, _, _, tasks = make_networks(env, cp['config'], 'cpu')
+        actor, _, _, tasks = make_networks(env, cp['config'], a.device)
         actor.load_state_dict(cp['actor']); actor.eval()
-        physics = CPUVectorPhysics(env, 1, device='cpu')
+        if a.device.startswith('cuda'):
+            from robot_control.runtime.physics import WarpPhysics
+            physics = WarpPhysics(env, 1, device=a.device)
+        else:
+            physics = CPUVectorPhysics(env, 1, device='cpu')
         n, h, future_count, context_count = env.layout.dof, env.layout.history, env.layout.future, env.layout.context
         qids = env.qids
     else:
@@ -107,9 +112,9 @@ def render(a):
     results = []
     with mujoco.Renderer(model, height=a.height, width=a.width) as renderer, torch.inference_mode():
         for name in a.motion:
-            clip = env.clip_names.index(name); ctx = torch.zeros(1, context_count); ctx[:, 0] = 1
-            state = env.references[clip, 0][None].clone(); state[:, 13+2*n:] = 0
-            if mojia: physics.reset(torch.tensor([0]), state, ctx)
+            clip = env.clip_names.index(name); ctx = torch.zeros(1, context_count, device=a.device if mojia else 'cpu'); ctx[:, 0] = 1
+            state = env.references[clip, 0][None].clone().to(a.device if mojia else 'cpu'); state[:, 13+2*n:] = 0
+            if mojia: physics.reset(torch.tensor([0],device=state.device), state, ctx)
             else: env.reset(clip, 0, ctx[0]); state = env.state(np.zeros(n))[None]
             def observation(s):
                 return proprio(s, tasks.nominal, ctx) if mojia else proprio(s, tasks.nominal, ctx, False)
@@ -120,7 +125,8 @@ def render(a):
                                     ffmpeg_params=['-crf','18','-preset','fast','-threads','2','-movflags','+faststart']) as writer:
                 for frame in range(budget):
                     ref = env.references[clip, frame]
-                    data.qpos[:7] = state[0, :7]; data.qpos[qids] = state[0, 13:13+n]
+                    current=state[0].detach().cpu().numpy()
+                    data.qpos[:7] = current[:7]; data.qpos[qids] = current[13:13+n]
                     offset = env.model.nq
                     data.qpos[offset:offset+7] = ref[:7]; data.qpos[offset+qids] = ref[13:13+n]
                     mujoco.mj_forward(model, data)
@@ -132,9 +138,10 @@ def render(a):
                     draw.text((12,8),f'{name} | iteration {cp["iteration"]+1} | {frame*dt:.2f}s\nSolid: policy   Cyan: reference (world coordinates)',font=font,fill='white')
                     writer.append_data(np.asarray(image))
                     if frame == 0: image.save(a.out / (name+'_poster.jpg'))
-                    first = frame if mojia else frame+1
+                    first = frame+1
                     future = env.references[clip, torch.arange(first, first+future_count)][None]
-                    action = actor(history, future, state)
+                    if mojia: future=future.to(a.device)
+                    action = actor(history, future, state).clamp(-20,20)
                     if mojia: nxt, _ = physics.step(action)
                     else:
                         target_q = env.nominal + env.scale*action[0].numpy()
@@ -142,7 +149,7 @@ def render(a):
                             env.data.ctrl[:] = np.clip(env.kp*(target_q-env.data.qpos[7:])-env.kd*env.data.qvel[6:],-env.effort,env.effort)
                             mujoco.mj_step(env.model,env.data)
                         nxt = env.state(action[0].numpy())[None]
-                    fallen = bool(tasks.termination(nxt, env.references[clip,frame+1][None], False))
+                    fallen = bool(tasks.termination(nxt, env.references[clip,frame+1][None].to(nxt.device), False))
                     state = nxt; history = torch.cat((history[:,1:], observation(state)[:,None]),1)
                     if fallen: break
             result = dict(clip=name, rendered_frames=frame+1, seconds=(frame+1)*dt, fall=fallen,
@@ -152,7 +159,7 @@ def render(a):
     digest = hashlib.sha256()
     with a.checkpoint.open('rb') as f:
         for block in iter(lambda:f.read(8*1024*1024), b''): digest.update(block)
-    (a.out/'render_report.json').write_text(json.dumps(dict(checkpoint=str(a.checkpoint),sha256=digest.hexdigest(),width=a.width,height=a.height,fps=1/dt,results=results),indent=2))
+    (a.out/'render_report.json').write_text(json.dumps(dict(checkpoint=str(a.checkpoint),physics_device=a.device,sha256=digest.hexdigest(),width=a.width,height=a.height,fps=1/dt,results=results),indent=2))
 
 
 def render_reference(a):

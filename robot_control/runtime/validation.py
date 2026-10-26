@@ -1,3 +1,4 @@
+from .interfaces import motion_future
 """Explicit fresh-physics model validation; no auto-start or background work."""
 import argparse
 import json
@@ -24,13 +25,13 @@ def independent_model_validation(env,model,actor,samples=8,seed=97031):
         history=proprio(state,env.task.nominal,context)[:,None].expand(-1,env.layout.history,-1).clone()
         predictions=state.clone();first_action=None
         for t in range(32):
-            future=env.references[clip,torch.arange(frame+t,frame+t+env.layout.future)][None]
+            future=motion_future(env.references,clip,frame+t,env.layout.future)[None]
             action=actor(history,future,state)+.1*torch.randn(1,env.layout.dof,generator=generator)
             if first_action is None:first_action=action.clone()
             state,_=physics.step(action);predictions=model(predictions,action,context)
             history=torch.cat((history[:,1:],proprio(state,env.task.nominal,context)[:,None]),1)
             if t+1 in errors:
-                errors[t+1].append(dict(root_position_mse=float((predictions[:,:3]-state[:,:3]).square().mean()),
+                errors[t+1].append(dict(root_position_mse=float((predictions[:,:3]-state[:,:3]).square().sum(-1).mean()),
                                         joint_mse=float((predictions[:,q]-state[:,q]).square().mean())))
         # One deterministic action-space direction per fresh state. No contact-gradient
         # accuracy claim can be inferred from a small directional sample.

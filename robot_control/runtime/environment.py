@@ -22,11 +22,6 @@ from ..robot_layout import RobotLayout
 ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT
 AUDIT = ROOT / "configs/robot.json"
-TRACKED = ("base_link", "lumbar_yaw", "left_hip_roll", "left_knee_pitch",
-           "left_ankle_roll", "right_hip_roll", "right_knee_pitch", "right_ankle_roll",
-           "left_shoulder_roll", "left_elbow_pitch", "left_elbow_yaw",
-           "right_shoulder_roll", "right_elbow_pitch", "right_elbow_yaw")
-
 
 def sha(path):
     path = Path(path)
@@ -53,7 +48,8 @@ def audited_control(audit=AUDIT):
                 action_scale=[record["nominal_action_scale_rad"]] * len(joints),
                 physics_dt=record["physics_dt_s"], control_dt=record["control_dt_s"],
                 actuator_delay_physics_steps=0, actuator_model="torque_clipped_zero_delay_pd",
-                hardware_validated=False, urdf=str(urdf.relative_to(ROOT)), urdf_sha256=sha(urdf),
+                hardware_validated=False, root_body=record.get('root_body','base_link'),
+                torso_body=record.get('torso_body','lumbar_yaw'), tracking_points=record.get('tracking_points',[]), urdf=str(urdf.relative_to(ROOT)), urdf_sha256=sha(urdf),
                 mesh_sha256={str(p.relative_to(ROOT)): sha(p) for p in sorted((urdf.parent.parent / "meshes").rglob("*")) if p.is_file()},
                 audit_sha256=sha(audit), velocity_basis="URDF conservative limit; not hardware certified")
 
@@ -196,16 +192,28 @@ class MojiaTracking:
             np.asarray(self.control[key], dtype=np.float64)
             for key in ("nominal", "stiffness", "damping", "effort_limit", "action_scale"))
         self.nominal_com = self.model.body_ipos.copy()
-        self.torso = self.model.body("lumbar_yaw").id
-        self.control["body_names"] = [self.model.body(i).name for i in range(1, self.model.nbody)]
-        self.task = Task(self.model, self.nominal, [self.model.body(n).id - 1 for n in TRACKED],
-                         qids=self.qids, vids=self.vids, dt=self.control["control_dt"])
+        if self.model.body(1).name != self.control.get('root_body','base_link'):
+            raise ValueError('Free-root body contract mismatch')
+        self.torso = self.model.body(self.control.get('torso_body','lumbar_yaw')).id
+        compiled_bodies = [self.model.body(i).name for i in range(1,self.model.nbody)]
+        if self.assets is None: self.control['body_names']=compiled_bodies
+        if self.control.get('body_names') != compiled_bodies:
+            raise ValueError('Robot control body-name order differs from compiled model')
+        points=self.control.get('tracking_points')
+        if not points: raise ValueError('Explicit tracking-point names and local offsets required')
+        if len({point['name'] for point in points}) != len(points): raise ValueError('Duplicate tracking point names')
+        self.tracking_points=points
+        self.task = Task(self.model, self.nominal, [self.model.body(point["body"]).id - 1 for point in points],
+                         qids=self.qids, vids=self.vids, dt=self.control["control_dt"],
+                         tracked_offsets=[point["offset_local_m"] for point in points])
         refs, self.clip_names = [], []
         if manifest:
             for entry in manifest["clips"]:
                 with np.load(self.assets / entry["file"], allow_pickle=False) as z:
                     if z["joint_names"].tolist() != self.control["joint_names"]:
                         raise ValueError("Prepared references must use the canonical named joint order")
+                    if z['body_names'].tolist()!=compiled_bodies:
+                        raise ValueError('Prepared motion body-name order differs from model')
                     state = z["states"]
                     if state.ndim != 2 or state.shape[1] != self.layout.state or len(state) < 2 or not np.isfinite(state).all():
                         raise ValueError("Invalid prepared state shape or values")
@@ -238,7 +246,9 @@ class MojiaTracking:
                              actuator_model="torque_clipped_zero_delay_pd", mujoco=mujoco.__version__,
                              hardware_validated=False)
 
-        self.contract["layout"]["dynamics_output"]=12+2*self.layout.dof
+        self.contract.update(root_body=self.control['root_body'],torso_body=self.control['torso_body'],
+                             tracking_points=self.tracking_points,future_frames='t+1 through t+future',
+                             state_units='metres, wxyz, world body-origin m/s, root-local rad/s, joint rad and rad/s')
         self.contract["dynamics_representation"]="independent local pose and velocity increments; normalized 58-D output"
 
     def state(self, last):

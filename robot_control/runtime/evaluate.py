@@ -1,3 +1,4 @@
+from .interfaces import motion_future
 """Offline CPU physics evaluation with explicit metrics and independent model tests.
 
 No evaluation is silently inserted into the learner's wall-time. Full evaluation
@@ -10,7 +11,7 @@ from pathlib import Path
 import time
 import numpy as np
 import torch
-from .kernel import proprio, rotation, spans
+from .kernel import proprio, rotation, spans, orientation_error
 from .interfaces import heading_rotation
 from .physics import CPUVectorPhysics
 from ..contact_metrics import FootContactMetrics
@@ -40,13 +41,13 @@ def physical_evaluation(env,actor,tasks,clips=None,max_steps=None,interface='mot
         physics.reset(torch.tensor([0]),state,context)
         contact_metrics=FootContactMetrics(physics.models[0],control_dt_s=env.control['control_dt'])
         history=proprio(state,tasks.nominal,context)[:,None].expand(-1,env.layout.history,-1).clone()
-        ret=0.;fail=False;saturated=0;root_error=[];joint_error=[];body_error=[];yaw_error=[];limit_steps=0
+        ret=0.;fail=False;saturated=0;root_error=[];joint_error=[];body_error=[];yaw_error=[];torso_error=[];limit_steps=0
         budget=env.lengths[clip]-1 if max_steps is None else min(max_steps,env.lengths[clip]-1)
         if budget<1:raise ValueError('Clip/evaluation budget must contain a transition')
         ids=torch.tensor([0 if interface=='motion' else 1]);cmd=torch.tensor(command,dtype=torch.float32)[None]
         for frame in range(budget):
-            future=env.references[clip,torch.arange(frame,frame+env.layout.future)][None]
-            action=actor(history,future,state,ids,cmd)
+            future=motion_future(env.references,clip,frame,env.layout.future)[None]
+            action=actor(history,future,state,ids,cmd).clamp(-20,20)
             nxt,diag=physics.step(action);ref=env.references[clip,frame+1][None]
             # CPUVectorPhysics already mj_forward's the endpoint. These queries
             # only read solver contacts/forces and do not advance or refit physics.
@@ -55,8 +56,10 @@ def physical_evaluation(env,actor,tasks,clips=None,max_steps=None,interface='mot
             saturated+=int(diag['torque_saturated'].sum())
             root_error.append(float((nxt[:,:3]-ref[:,:3]).square().sum()))
             joint_error.append(float((nxt[:,q]-ref[:,q]).square().mean()))
-            p=tasks.fk(nxt)[0];rp=tasks.fk(ref)[0]
-            body_error.append(float((p[:,tasks.base.tracked]-rp[:,tasks.base.tracked]).square().sum(-1).mean()))
+            fk=tasks.fk(nxt);rfk=tasks.fk(ref)
+            p=tasks.base.tracking_kinematics(fk)[0];rp=tasks.base.tracking_kinematics(rfk)[0]
+            torso_error.append(float(orientation_error(fk[1][:,tasks.torso_index],rfk[1][:,tasks.torso_index])))
+            body_error.append(float((p-rp).square().sum(-1).mean()))
             heading=heading_rotation(nxt);target=heading_rotation(ref)
             cosine=(heading[...,:2,0]*target[...,:2,0]).sum(-1).clamp(-1,1)
             yaw_error.append(float(torch.acos(cosine).square()))
@@ -70,6 +73,8 @@ def physical_evaluation(env,actor,tasks,clips=None,max_steps=None,interface='mot
                             episode_reward=ret,root_position_rmse_m=float(np.sqrt(np.mean(root_error))),
                             joint_rmse_rad=float(np.sqrt(np.mean(joint_error))),root_yaw_rmse_rad=float(np.sqrt(np.mean(yaw_error))),
                             tracked_body_position_rmse_m=float(np.sqrt(np.mean(body_error))),
+                            tracked_keypoint_position_rmse_m=float(np.sqrt(np.mean(body_error))),
+                            torso_orientation_rmse_rad=float(np.sqrt(np.mean(torso_error))),
                             torque_saturated_control_fraction=saturated/steps,soft_limit_control_fraction=limit_steps/steps,
                             physical_foot_contacts=contact_metrics.summary()))
     return dict(motions=results,interface=interface,completion_rate=sum(r['completed'] for r in results)/len(results),

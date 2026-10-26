@@ -105,10 +105,7 @@ def require_no_competing_training(proc_root=Path('/proc'), ignore_pid=None):
     A protected running report is checked separately because sandboxed /proc
     may hide host processes. This function never signals or changes a process.
     """
-    protected_modules = {'scripts.reproduction.train_v3', 'scripts.reproduction.train',
-                         'experiments.reproduction_v4.train',
-                         'experiments.reproduction_v4.runtime.train_v3',
-                         'migration.mojia_v3_8.runtime.train','robot_control.runtime.train'}
+    protected_modules = {'robot_control.runtime.train'}
     ignore_pid = os.getpid() if ignore_pid is None else ignore_pid
     for path in Path(proc_root).glob('[0-9]*/cmdline'):
         if path.parent.name == str(ignore_pid):
@@ -117,12 +114,18 @@ def require_no_competing_training(proc_root=Path('/proc'), ignore_pid=None):
             argv = path.read_bytes().decode(errors='replace').split('\0')
         except OSError:
             continue
-        if '-m' not in argv:
+        if not argv or not Path(argv[0]).name.startswith('python'):
             continue
-        index = argv.index('-m') + 1
-        module = argv[index] if index < len(argv) else ''
-        if module in protected_modules and '--preflight' not in argv and '--help' not in argv:
-            raise RuntimeError(f'Competing training process {path.parent.name}: {module}; no job was started')
+        entry=''
+        if '-m' in argv:
+            index=argv.index('-m')+1
+            module=argv[index] if index<len(argv) else ''
+            if module in protected_modules:entry=module
+        elif len(argv)>1:
+            script=Path(argv[1])
+            if script.name=='train.py' and script.parent.name=='scripts':entry=str(script)
+        if entry and '--preflight' not in argv and '--help' not in argv:
+            raise RuntimeError(f'Competing training process {path.parent.name}: {entry}; no job was started')
 
 
 def guard_resources(c,device,iterations=None):
@@ -282,7 +285,7 @@ def replay_model_validation(model,replay,device,batch=64):
         result[str(h)]={'full_windows':count,'short_windows':batch-count}
         if count:
             truth=b['states'][:,-1];groups=model.error_groups(p,truth)
-            result[str(h)].update(root_position_rmse_m=float((p[valid,:3]-truth[valid,:3]).square().mean().sqrt()),
+            result[str(h)].update(root_position_rmse_m=float((p[valid,:3]-truth[valid,:3]).square().sum(-1).mean().sqrt()),
                 joint_rmse_rad=float((p[valid,13:13+model.layout.dof]-truth[valid,13:13+model.layout.dof]).square().mean().sqrt()),
                 normalized_groups={k:float(v[valid].mean()) for k,v in groups.items()})
     return result
