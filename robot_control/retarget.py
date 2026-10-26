@@ -18,7 +18,7 @@ from smpl_replay import compute_robot_link_lengths, compute_link_geometry_from_p
 from robot_retarget import RobotRetarget
 class LimitedRetarget(RobotRetarget):
     def setup_retarget_configuration(self):
-        audit=json.loads((Path(__file__).resolve().parents[2]/'configs/robot.json').read_text())
+        audit=json.loads((Path(__file__).resolve().parents[1]/'configs/robot.json').read_text())
         self.audit_joints=audit['joints']
         for j in self.audit_joints:
             i=self.model.joint(j['name']).id

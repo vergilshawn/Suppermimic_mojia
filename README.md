@@ -51,8 +51,7 @@ See [model status](docs/MODELS.md) and [attribution](THIRD_PARTY_NOTICES.md). Or
 
 ## Commands
 
-All executable entry points live in `scripts/`. Their implementations live in
-`robot_control/commands/`; training and physics remain in `robot_control/runtime/`.
+All executable entry points live in `scripts/`. These scripts contain argument parsing and command logic directly; reusable training and physics code lives in `robot_control/runtime/`.
 Run commands from the repository root. Each command supports `--help`.
 
 | Entry | Operations |
