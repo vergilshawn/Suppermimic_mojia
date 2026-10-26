@@ -3,7 +3,7 @@
   "robot": "mojia_v3_8",
   "readiness": "offline contract prepared; training/runtime/hardware migration pending",
   "candidate_asset": {
-    "path": "robots/mojia/urdf/robot.urdf",
+    "path": "assets/robots/mojia/urdf/robot.urdf",
     "sha256": "90b82954d54d038187c5620d711ade4380662e5420e8d8551244941ae4f3c9fd",
     "joints": {
       "lumbar_yaw_joint": {

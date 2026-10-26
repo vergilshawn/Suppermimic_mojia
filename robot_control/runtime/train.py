@@ -449,14 +449,14 @@ def run(c,out,device,seed=42,resume=None,max_iterations=None):
         for sig,handler in old_handlers.items():signal.signal(sig,handler)
 
 
-def main():
+def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config',type=Path);parser.add_argument('--out',type=Path)
     parser.add_argument('--device',default='cuda:0');parser.add_argument('--seed',type=int,default=42)
     parser.add_argument('--resume',type=Path);parser.add_argument('--preflight',action='store_true')
     parser.add_argument('--smoke',action='store_true',help='Explicit <=2 iteration tiny CPU physics and learning check')
     parser.add_argument('--verification-iterations',type=int)
-    args=parser.parse_args()
+    args=parser.parse_args(argv)
     if args.smoke and args.config is not None:parser.error('--smoke owns its fixed tiny config; do not combine with --config')
     if args.config is None and not args.smoke:parser.error('--config required unless --smoke')
     c=default_config(True) if args.smoke else json.loads(args.config.read_text())

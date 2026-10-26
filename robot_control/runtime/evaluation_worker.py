@@ -38,8 +38,8 @@ def evaluate(env,actor,tasks,physics,device,max_steps=None):
         steps=int(counts[i]);motion.append(dict(clip=name,steps=steps,fall=bool(fallen[i]),completed=bool(not fallen[i] and steps==env.lengths[i]-1),normalized_return=float(ret[i]/(.1*(env.lengths[i]-1))),joint_rmse_rad=float((joint_error[i]/max(steps,1)).sqrt()),root_rmse_m=float((root_error[i]/max(steps,1)).sqrt())))
     return dict(motions=motion,normalized_return=float(np.mean([r['normalized_return'] for r in motion])),completion_rate=float(np.mean([r['completed'] for r in motion])),evaluation_is_full=max_steps is None,action_noise=0,observation_noise=False)
 
-def main():
-    p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True);p.add_argument('--device',default='cuda:0');a=p.parse_args()
+def main(argv=None):
+    p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True);p.add_argument('--device',default='cuda:0');a=p.parse_args(argv)
     torch.set_num_threads(1);torch.set_float32_matmul_precision('high');queue=a.run/'evaluation';queue.mkdir(exist_ok=True)
     env=actor=tasks=physics=None
     guard=RegressionGuard()

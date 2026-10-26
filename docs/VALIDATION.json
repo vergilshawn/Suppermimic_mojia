@@ -9,5 +9,16 @@
   "final_mojia_branch_tests_passed": 5,
   "both_policy_cpu_load_checks": true,
   "both_config_preflight_checks": true,
-  "short_cpu_checks_are_not_performance_benchmarks": true
+  "short_cpu_checks_are_not_performance_benchmarks": true,
+  "command_layout_checks": {
+    "date": "2026-10-26",
+    "unit_tests": 5,
+    "cli_help_routes": 16,
+    "dataset_contract": "passed",
+    "checkpoint_unchanged_tensors": 242,
+    "retained_completed_iterations": 812,
+    "cpu_evaluation": "40 clips, 2 steps per clip; functionality only",
+    "render": "3 frames at 320x180, dance1_subject2; functionality only",
+    "formal_training_started": false
+  }
 }

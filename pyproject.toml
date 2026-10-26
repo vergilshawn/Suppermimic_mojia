@@ -9,6 +9,9 @@ description = "Model-based motion control with MuJoCo and PyTorch"
 requires-python = ">=3.11"
 dynamic = ["dependencies"]
 
+[project.optional-dependencies]
+visualization = ["imageio>=2.34", "imageio-ffmpeg>=0.5", "Pillow>=10", "PyOpenGL>=3.1"]
+
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 

@@ -18,7 +18,7 @@ from smpl_replay import compute_robot_link_lengths, compute_link_geometry_from_p
 from robot_retarget import RobotRetarget
 class LimitedRetarget(RobotRetarget):
     def setup_retarget_configuration(self):
-        audit=json.loads((Path(__file__).resolve().parents[1]/'configs/robot.json').read_text())
+        audit=json.loads((Path(__file__).resolve().parents[2]/'configs/robot.json').read_text())
         self.audit_joints=audit['joints']
         for j in self.audit_joints:
             i=self.model.joint(j['name']).id
@@ -94,6 +94,3 @@ def run(source,out,limit=None):
     (out/'joint_order.json').write_text(json.dumps(joint_names,indent=2))
     record=dict(source=str(source),source_sha256=sha(source),output_sha256=sha(dest),frames=len(p),fps=fps,raw_human_bvh=True,root_displacement_scale=scale,axes='Y-up to Z-up then +90deg yaw; TPOSE calibrated body orientations',target_xml=str(xml),target_xml_sha256=sha(xml),retargeter_sha256=sha(RETARGET/'scripts/robot_retarget.py'),physical_tracking_validated=False,limits_from_training_audit=True,per_frame_velocity_bounds=True)
     (out/(source.stem+'.json')).write_text(json.dumps(record,indent=2));return record
-if __name__=='__main__':
-    ap=argparse.ArgumentParser();ap.add_argument('--source',type=Path,required=True);ap.add_argument('--out',type=Path,required=True);ap.add_argument('--limit',type=int)
-    a=ap.parse_args();print(json.dumps(run(a.source,a.out,a.limit)))

@@ -3,8 +3,8 @@
   "weights": [
     {
       "path": "checkpoints/mojia/learner.pt",
-      "sha256": "3a736068da56f3f69e506d684b8c47cbf88e16bfa0e7dcebadb0c575b5527db6",
-      "bytes": 72555854,
+      "sha256": "cf710b5b6860ea4e02ca7a787b92c32f7810518453fd7704d6b1ce05da93aee0",
+      "bytes": 72555970,
       "iteration": 812
     }
   ],

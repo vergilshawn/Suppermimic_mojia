@@ -199,7 +199,7 @@ def prepare(source, out, joint_names=None, fps=None, *, synthetic_standing=False
     return manifest
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path)
     parser.add_argument("--joint-order", type=Path)
@@ -209,7 +209,7 @@ def main():
     parser.add_argument("--frames", type=int, default=128)
     parser.add_argument("--correct-floor-clearance-m", type=float,
                         help="Explicit derived-data correction only; logs every root-height shift and regenerates velocities")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     names = json.loads(args.joint_order.read_text()) if args.joint_order else None
     if isinstance(names, dict):
         if args.source and args.source.is_file() and names.get("source_sha256") and sha(args.source) != names["source_sha256"]:
