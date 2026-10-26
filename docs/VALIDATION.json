@@ -4,5 +4,10 @@
   "mojia_gpu_resume_checked_from_iteration": 812,
   "mojia_gpu_resume_completed_iteration": 813,
   "original_mojia_checkpoint_preserved_at": 812,
-  "formal_training_restarted": false
+  "formal_training_restarted": false,
+  "final_g1_branch_switch_tests_passed": 5,
+  "final_mojia_branch_tests_passed": 5,
+  "both_policy_cpu_load_checks": true,
+  "both_config_preflight_checks": true,
+  "short_cpu_checks_are_not_performance_benchmarks": true
 }

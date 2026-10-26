@@ -22,6 +22,13 @@ python train.py --config configs/train.json --out runs/mojia_new --device cuda:0
 
 Training is currently stopped. The stopped Mojia run reached 812 iterations of its 50000-iteration limit. Resume only from its full checkpoint, not the learner weights.
 
+To resume the retained local run (not started automatically):
+
+```bash
+python train.py --config configs/train.json --out runs/mojia \
+  --resume runs/mojia/latest.pt --device cuda:0 --seed 42
+```
+
 ## Evaluate
 
 ```bash
