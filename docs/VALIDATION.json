@@ -19,6 +19,7 @@
     "retained_completed_iterations": 812,
     "cpu_evaluation": "40 clips, 2 steps per clip; functionality only",
     "render": "3 frames at 320x180, dance1_subject2; functionality only",
-    "formal_training_started": false
+    "formal_training_started": false,
+    "full_resume_metadata_and_collector_contract": "passed"
   }
 }
