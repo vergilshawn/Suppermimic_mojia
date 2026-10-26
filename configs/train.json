@@ -1,0 +1,70 @@
+{
+  "profile": "g1_motion",
+  "schema": 5,
+  "assets": "data/g1",
+  "interfaces": "motion",
+  "velocity_mode": "rl",
+  "history": 10,
+  "future": 10,
+  "latent": 32,
+  "dynamics_widths": [
+    2048,
+    2048,
+    2048
+  ],
+  "encoder_widths": [
+    2048,
+    1024,
+    512,
+    256
+  ],
+  "decoder_widths": [
+    2048,
+    1024,
+    512,
+    256
+  ],
+  "velocity_encoder_widths": [
+    256,
+    256
+  ],
+  "critic_widths": [
+    256,
+    128
+  ],
+  "fit_window": 8,
+  "horizon": 32,
+  "fit_steps": 10,
+  "actor_steps": 1,
+  "critic_epochs": 5,
+  "critic_minibatches": 4,
+  "wm_batch_size": 2048,
+  "actor_batch_size": 4096,
+  "simulator_environments": 4096,
+  "replay_transitions": 4096000,
+  "replay_storage": "cpu",
+  "simulator_backend": "mujoco_warp",
+  "update_to_data_ratio": 0.4,
+  "utd_unit": "outer_updates_per_vector_control_step",
+  "learning_rate": 0.0002,
+  "lr_decay_iterations": 250000,
+  "lr_minimum_fraction": 0.03,
+  "iterations": 100000,
+  "randomize": true,
+  "curriculum_ema": 0.1,
+  "threads": 2,
+  "matmul_precision": "high",
+  "evaluation_interval": 1000,
+  "validation_interval": 100,
+  "checkpoint_interval": 1000,
+  "filtering_deferred": true,
+  "paper_equivalent": false,
+  "deviations": [
+    "Local G1 physical asset and 74/frame relative goal retained; not exact upstream encoding",
+    "CPU replay retained until GPU memory profiling",
+    "Unfiltered 40 LAFAN clips; no full BONES claim",
+    "70 local state increments and running normalization adapted to local body-angular-velocity convention"
+  ],
+  "warmup_steps": 64,
+  "wm_only_iterations": 500
+}

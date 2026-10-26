@@ -1,0 +1,8 @@
+{
+  "g1_cpu_tests_passed": 5,
+  "mojia_cpu_tests_passed": 5,
+  "mojia_gpu_resume_checked_from_iteration": 812,
+  "mojia_gpu_resume_completed_iteration": 813,
+  "original_mojia_checkpoint_preserved_at": 812,
+  "formal_training_restarted": false
+}

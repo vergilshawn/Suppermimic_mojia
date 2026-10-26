@@ -1,0 +1,70 @@
+{
+  "checkpoint": "/media/user/DATA/supermimic/subprojects/original_training/revised_v5/outputs/g1_v5_100k_seed42/evaluation/policy_000030000.pt",
+  "sha256": "16ee303edac27eb6820c03d2f5ad09d4e543b90a8c287d0a1aac548e4121cf65",
+  "backend": "NVIDIA GeForce RTX 5090/PCIe/SSE2",
+  "width": 1920,
+  "height": 1080,
+  "fps": 50,
+  "results": [
+    {
+      "clip": "dance1_subject2",
+      "seconds": 12,
+      "full_gpu_evaluation": {
+        "clip": "dance1_subject2",
+        "steps": 6573,
+        "completed": true,
+        "terminated": false,
+        "budget_limited": false,
+        "normalized_return": 0.878677156439426,
+        "joint_rmse_rad": 0.11691620331047818,
+        "root_rms_distance_m": 0.0863453232513202
+      },
+      "preview_cpu_survived": true
+    },
+    {
+      "clip": "fight1_subject2",
+      "seconds": 12,
+      "full_gpu_evaluation": {
+        "clip": "fight1_subject2",
+        "steps": 12243,
+        "completed": true,
+        "terminated": false,
+        "budget_limited": false,
+        "normalized_return": 0.9185908426513273,
+        "joint_rmse_rad": 0.09387909572573414,
+        "root_rms_distance_m": 0.07033528683996088
+      },
+      "preview_cpu_survived": true
+    },
+    {
+      "clip": "fallAndGetUp1_subject4",
+      "seconds": 12,
+      "full_gpu_evaluation": {
+        "clip": "fallAndGetUp1_subject4",
+        "steps": 8410,
+        "completed": true,
+        "terminated": false,
+        "budget_limited": false,
+        "normalized_return": 0.868331033613546,
+        "joint_rmse_rad": 0.19392798908822037,
+        "root_rms_distance_m": 0.11102604912535532
+      },
+      "preview_cpu_survived": true
+    },
+    {
+      "clip": "jumps1_subject5",
+      "seconds": 12,
+      "full_gpu_evaluation": {
+        "clip": "jumps1_subject5",
+        "steps": 12221,
+        "completed": true,
+        "terminated": false,
+        "budget_limited": false,
+        "normalized_return": 0.9333239545965167,
+        "joint_rmse_rad": 0.08908764624066656,
+        "root_rms_distance_m": 0.07539399819232358
+      },
+      "preview_cpu_survived": true
+    }
+  ]
+}

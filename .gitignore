@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.local/
+.organize/
+data/
+checkpoints/
+runs/
+*.pt
+*.pth
+*.onnx
+*.npz
+*.log
+MUJOCO_LOG.TXT
+third_party/

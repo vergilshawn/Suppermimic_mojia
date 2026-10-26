@@ -1,0 +1,12 @@
+{
+  "robot": "g1",
+  "weights": [
+    {
+      "path": "checkpoints/g1/best.pt",
+      "sha256": "a09b5c1eb5e17af8816679b87883b4d2d69fa1012a6e2e67f70f613fb0e06f96",
+      "bytes": 37332113,
+      "iteration": 30000
+    }
+  ],
+  "distribution": "Local file; attach separately to a GitHub Release"
+}

@@ -1,0 +1,9 @@
+# Verified existing RTX5090 / CUDA12.8 environment. Keep torch CUDA wheel.
+# CUDA wheel: pip install torch==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+torch==2.7.0
+mujoco==3.8.1
+mujoco-warp==3.8.1
+warp-lang==1.12.0
+numpy==1.26.0
+scipy==1.15.3
+PyYAML==6.0.2
