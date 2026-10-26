@@ -1,25 +1,23 @@
 {
-  "g1_cpu_tests_passed": 5,
-  "mojia_cpu_tests_passed": 5,
-  "mojia_gpu_resume_checked_from_iteration": 812,
-  "mojia_gpu_resume_completed_iteration": 813,
-  "original_mojia_checkpoint_preserved_at": 812,
-  "formal_training_restarted": false,
-  "final_g1_branch_switch_tests_passed": 5,
-  "final_mojia_branch_tests_passed": 5,
-  "both_policy_cpu_load_checks": true,
-  "both_config_preflight_checks": true,
-  "short_cpu_checks_are_not_performance_benchmarks": true,
-  "command_layout_checks": {
-    "date": "2026-10-26",
-    "unit_tests": 5,
-    "cli_help_routes": 16,
-    "dataset_contract": "passed",
-    "checkpoint_unchanged_tensors": 242,
-    "retained_completed_iterations": 812,
-    "cpu_evaluation": "40 clips, 2 steps per clip; functionality only",
-    "render": "3 frames at 320x180, dance1_subject2; functionality only",
-    "formal_training_started": false,
-    "full_resume_metadata_and_collector_contract": "passed"
-  }
+  "robot": "mojia_v3_8",
+  "model": "short arm; no support rods; elbows nominal zero",
+  "config": "configs/train.json",
+  "iterations": 50000,
+  "prepared_clips": 40,
+  "prepared_frames": 441120,
+  "dataset_contract_checked": true,
+  "gpu_verification": {
+    "device": "cuda:0",
+    "completed_iterations": 1,
+    "status": "verification_budget_complete",
+    "model_loss": 30.552448272705078,
+    "scope": "Full training recipe, warmup and one world-model iteration; policy updates start after 500 world-model-only iterations."
+  },
+  "unit_tests_passed": 5,
+  "formal_training_started": false,
+  "known_reference_limitations": {
+    "self_penetration_over_2cm_frame_fraction": 0.014501722887196228,
+    "max_floor_lift_m": 0.397396981716156
+  },
+  "retained_g1_checkpoint": "checkpoints/g1/best.pt"
 }

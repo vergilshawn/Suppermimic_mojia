@@ -16,6 +16,14 @@ def main(argv=None):
     r.add_argument('--seconds', type=float, default=12)
     r.add_argument('--width', type=int, default=1920)
     r.add_argument('--height', type=int, default=1080)
+    ref = sub.add_parser('reference', help='Play prepared references kinematically using the robot model; no policy needed.')
+    ref.add_argument('--config', type=Path, default=Path('configs/train.json'))
+    ref.add_argument('--motion', nargs='+', required=True)
+    ref.add_argument('--out', type=Path, required=True)
+    ref.add_argument('--seconds', type=float, default=20, help='0 renders the entire clip')
+    ref.add_argument('--start', type=float, default=0)
+    ref.add_argument('--width', type=int, default=1920)
+    ref.add_argument('--height', type=int, default=1080)
     s = sub.add_parser('serve', help='Serve existing comparison files locally.')
     s.add_argument('--directory', type=Path, default=Path('web'))
     s.add_argument('--port', type=int, default=8000)
@@ -30,6 +38,10 @@ def main(argv=None):
         except KeyboardInterrupt: pass
         finally: server.server_close()
         return
+    if a.mode == 'reference':
+        if a.seconds < 0 or a.start < 0 or min(a.width,a.height)<64 or a.width%2 or a.height%2:
+            p.error('Use nonnegative times and even image dimensions >=64')
+        return render_reference(a)
     if a.seconds <= 0 or min(a.width, a.height) < 64 or a.width % 2 or a.height % 2:
         p.error('Use positive duration and even image dimensions >=64')
     render(a)
@@ -141,6 +153,57 @@ def render(a):
     with a.checkpoint.open('rb') as f:
         for block in iter(lambda:f.read(8*1024*1024), b''): digest.update(block)
     (a.out/'render_report.json').write_text(json.dumps(dict(checkpoint=str(a.checkpoint),sha256=digest.hexdigest(),width=a.width,height=a.height,fps=1/dt,results=results),indent=2))
+
+
+def render_reference(a):
+    import os
+    os.environ.setdefault('MUJOCO_GL', 'egl')
+    import json, html
+    import numpy as np
+    import mujoco, torch
+    import imageio.v2 as imageio
+    from PIL import Image, ImageDraw
+    from robot_control.runtime.train import make_environment
+    torch.set_num_threads(2)
+    env = make_environment(json.loads(a.config.read_text()))
+    unknown = set(a.motion)-set(env.clip_names)
+    if unknown: raise ValueError(f'Unknown clips: {sorted(unknown)}')
+    a.out.mkdir(parents=True, exist_ok=True)
+    for name in a.motion:
+        if (a.out/(name+'.mp4')).exists(): raise FileExistsError(a.out/(name+'.mp4'))
+    model = env.model
+    model.vis.global_.offwidth=a.width; model.vis.global_.offheight=a.height
+    model.vis.quality.offsamples=4
+    model.vis.headlight.ambient[:]=.5
+    model.vis.headlight.diffuse[:]=.9
+    camera=mujoco.MjvCamera(); camera.distance=3.3; camera.azimuth=135; camera.elevation=-18
+    dt=env.control['control_dt']; n=len(env.control['joint_names'])
+    qids=env.qids if hasattr(env,'qids') else np.arange(7,7+n)
+    results=[]
+    with mujoco.Renderer(model,height=a.height,width=a.width) as renderer:
+        for name in a.motion:
+            clip=env.clip_names.index(name); length=int(env.lengths[clip]); start=round(a.start/dt)
+            if start>=length: raise ValueError(f'Start exceeds clip duration: {name}')
+            end=length if a.seconds==0 else min(length,start+round(a.seconds/dt))
+            smooth=None
+            with imageio.get_writer(a.out/(name+'.mp4'),fps=1/(2*dt),codec='libx264',macro_block_size=2,
+                                   ffmpeg_params=['-crf','18','-preset','fast','-threads','2','-movflags','+faststart']) as writer:
+                for frame in range(start,end,2):
+                    state=env.references[clip,frame].numpy()
+                    env.data.qpos[:7]=state[:7]; env.data.qpos[qids]=state[13:13+n]
+                    mujoco.mj_forward(model,env.data)
+                    target=np.array([state[0],state[1],.65]); smooth=target if smooth is None else .9*smooth+.1*target
+                    camera.lookat[:]=smooth; renderer.update_scene(env.data,camera=camera)
+                    image=Image.fromarray(renderer.render()); draw=ImageDraw.Draw(image)
+                    draw.rectangle((0,0,a.width,42),fill='#132033')
+                    draw.text((12,8),f'REFERENCE ONLY | {name} | {frame*dt:.2f}s / {(length-1)*dt:.2f}s | kinematic playback',fill='white')
+                    writer.append_data(np.asarray(image))
+                    if frame==start: image.save(a.out/(name+'_poster.jpg'))
+            result=dict(clip=name,source=str(Path(env.assets)/'motions'/(name+'.npz')) if hasattr(env,'assets') else str(a.config),start_s=a.start,end_s=end*dt,full_duration_s=(length-1)*dt,kinematic_only=True)
+            results.append(result); print(json.dumps(result),flush=True)
+    cards=''.join('<article><h2>'+html.escape(r['clip'])+'</h2><video controls preload="metadata" poster="'+r['clip']+'_poster.jpg" src="'+r['clip']+'.mp4"></video><p>Preview '+str(round(r['end_s']-r['start_s'],2))+' s / full '+str(round(r['full_duration_s'],2))+' s</p></article>' for r in results)
+    (a.out/'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Mojia reference motions</title><style>body{background:#101827;color:#eee;font:18px sans-serif;margin:30px}main{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:24px}video{width:100%}article{background:#1b2940;padding:18px}</style><h1>Mojia reference motions</h1><p>Kinematic playback of prepared training references. No policy or physics rollout; this does not prove dynamic feasibility.</p><main>'+cards+'</main>')
+    (a.out/'reference_report.json').write_text(json.dumps(dict(config=str(a.config),results=results),indent=2))
 
 
 if __name__ == "__main__":

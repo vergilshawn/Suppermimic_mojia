@@ -1,6 +1,9 @@
-# Robot Motion Control — MOJIA
+# Robot Motion Control — Mojia
 
-Model-based motion tracking with PyTorch and MuJoCo Warp. This branch targets **Mojia v3.8, 23 DOF**. Use `git switch g1` or `git switch mojia` to change robot implementations. Checkpoints are not interchangeable.
+PyTorch model-based motion tracking with MuJoCo Warp for **Mojia v3.8, 23 DOF**.
+The default model has no forearm support rods. Elbow coordinate zero represents
+an approximately 90-degree physical bend; both elbow nominal values are zero.
+The `g1` branch contains the G1 implementation. Robot weights are incompatible.
 
 ## Setup
 
@@ -9,77 +12,70 @@ conda activate mojia_rl
 pip install -e .
 ```
 
-Python 3.11 and an existing CUDA-compatible PyTorch installation are required. For RTX 5090, install the CUDA 12.8 wheel matching `requirements.txt`. No installation is needed in the already verified local environment.
+The existing environment is verified with Python 3.11, PyTorch 2.7/CUDA 12.8,
+MuJoCo 3.8.1 and an RTX 5090. See `requirements.txt` for dependencies.
 
-## Train
-
-Prepared references belong in `data/mojia/`; see [data preparation](docs/DATA.md). Check the recipe before launch:
+## Training
 
 ```bash
 python scripts/train.py --config configs/train.json --preflight
-python scripts/train.py --config configs/train.json --out runs/mojia_new --device cuda:0 --seed 42
+python scripts/train.py --config configs/train.json \
+  --out runs/mojia --device cuda:0 --seed 42
 ```
 
-Training is currently stopped. The stopped Mojia run reached 812 iterations of its 50000-iteration limit. Resume only from its full checkpoint, not the learner weights.
-
-To resume the retained local run (not started automatically):
+This starts a fresh run, with a maximum of **50000 iterations**. Independent GPU
+evaluation runs every 1000 iterations; best checkpoints and sustained-regression
+stopping are enabled. To stop, press Ctrl+C once and wait for checkpoint saving.
+To resume this same run later:
 
 ```bash
-python scripts/train.py --config configs/train.json --out runs/mojia \
-  --resume runs/mojia/latest.pt --device cuda:0 --seed 42
+python scripts/train.py --config configs/train.json \
+  --out runs/mojia --resume runs/mojia/latest.pt --device cuda:0 --seed 42
 ```
 
-## Evaluate
-
-```bash
-python scripts/evaluate.py single --checkpoint checkpoints/mojia/learner.pt --device cuda:0 --out runs/mojia_evaluation.json
-```
-
-`--device cpu --max-steps 100` provides a bounded functionality check; it is not a full-clip success test.
-
-## Layout
-
-- `robot_control/`: training, physics, policy, world model and evaluation.
-- `configs/`: training and robot settings.
-- `assets/robots/`: required robot assets where applicable.
-- `scripts/`: train, evaluate, visualize, data and checkpoint entry points.
-- `tests/`: focused checks.
-- `web/`: final visual comparison, shared between branches.
-- `data/`, `checkpoints/`, `runs/`: local files excluded from Git.
-
-See [model status](docs/MODELS.md) and [attribution](THIRD_PARTY_NOTICES.md). Organizing the project does not establish hardware readiness or paper-level performance.
+The 40 reference clips pass joint-limit, velocity and data-contract checks.
+Residual leg collisions affect approximately 1.45% of frames at a 2cm review
+threshold, and floor-height corrections reach 39.7cm. These are known reference
+limitations; successful control or hardware deployment has not been established.
+No reference clips are automatically filtered.
 
 ## Commands
 
-All executable entry points live in `scripts/`. These scripts contain argument parsing and command logic directly; reusable training and physics code lives in `robot_control/runtime/`.
-Run commands from the repository root. Each command supports `--help`.
+All executable commands are in `scripts/`; reusable implementation is in
+`robot_control/`. Run from the repository root. Use `--help` for parameters.
 
-| Entry | Operations |
+| Script | Operations |
 | --- | --- |
-| `scripts/train.py` | Train, `--resume`, `--preflight`, bounded verification |
-| `scripts/evaluate.py` | `single`, `batch`, `worker` (existing asynchronous queue) |
-| `scripts/visualize.py` | `render` a policy/reference video, `serve` the final website |
-| `scripts/data.py` | `prepare` references, `check` dataset/robot contract, `retarget` one BVH, `pipeline` a BVH library |
-| `scripts/checkpoint.py` | `inspect`, explicit trusted-checkpoint `import` after relocation |
+| `train.py` | Train, resume, preflight, bounded verification |
+| `evaluate.py` | `single`, `batch`, asynchronous `worker` |
+| `visualize.py` | `reference`, policy `render`, website `serve` |
+| `data.py` | `retarget`, `prepare`, `pipeline`, `check`, full-frame `audit` |
+| `checkpoint.py` | `inspect`, explicit trusted-checkpoint `import` |
 
 ```bash
-python scripts/data.py check --config configs/train.json
-python scripts/checkpoint.py inspect --path CHECKPOINT
-python scripts/visualize.py render --checkpoint CHECKPOINT \
-  --motion dance1_subject2 fight1_subject2 --seconds 12 \
-  --width 1920 --height 1080 --out runs/preview
-python scripts/visualize.py serve --directory web --port 8000
+python scripts/evaluate.py single --checkpoint runs/mojia/best_learner.pt \
+  --device cuda:0 --out runs/evaluation.json
+python scripts/visualize.py reference --config configs/train.json \
+  --motion dance1_subject2 fight1_subject2 --seconds 20 --out runs/reference_new
+python scripts/visualize.py serve --directory runs/mojia_reference --port 8000
+python scripts/data.py audit --config configs/train.json --out runs/audit_new
 ```
 
-Replace `CHECKPOINT` with `checkpoints/mojia/learner.pt`.
-Video rendering uses deterministic CPU physics and EGL rendering; it does not
-start training. The translucent robot preserves world-space tracking errors.
-`render_report.json` distinguishes falls, full completion and a limited preview.
-Existing video files are protected against overwrite. Optional video dependencies:
-`pip install -e '.[visualization]'` (FFmpeg is supplied by imageio-ffmpeg).
+Reference playback sets joint poses directly; it does not test a learned policy.
+Use `--seconds 0` for a full reference clip and `--start` for a later segment.
+Video dependencies: `pip install -e '.[visualization]'`.
 
-Robot source models and meshes are under `assets/robots/`. Prepared motion caches
-remain under `data/`, outside Git. Checkpoint import changes path/contract metadata;
-it is only for trusted, equivalent assets and does not convert between robots or
-repair an incompatible model. Hardware-ready ONNX export is not provided by this
-command.
+## Layout
+
+- `configs/`: one robot contract, one training recipe, selected motion names.
+- `assets/robots/mojia/`: the active URDF and required meshes.
+- `robot_control/`: learning, physics, retargeting and data checks.
+- `scripts/`: functional command entry points.
+- `data/mojia_raw/`, `data/mojia/`: source CSVs and prepared references.
+- `runs/mojia_reference/`, `runs/mojia_audit/`: current previews and full audit.
+- `web/`: retained final G1 comparison showcase.
+- `checkpoints/g1/best.pt`: retained successful G1 policy, used on the G1 branch.
+
+Datasets, weights and run outputs remain local and are excluded from Git.
+See [data preparation](docs/DATA.md), [model status](docs/MODELS.md),
+[licenses and attribution](THIRD_PARTY_NOTICES.md).

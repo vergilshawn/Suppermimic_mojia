@@ -52,7 +52,14 @@ def run(source,out,limit=None):
     dest=out/(source.stem+'.csv')
     if dest.exists(): raise FileExistsError(dest)
     cfgpath=RETARGET/'config/robot/mojia_v3_8.yaml';cfg=yaml.safe_load(cfgpath.read_text());xml=RETARGET/cfg['robot_xml_path']
-    model=mujoco.MjModel.from_xml_path(str(xml));data=mujoco.MjData(model);mujoco.mj_forward(model,data)
+    model=mujoco.MjModel.from_xml_path(str(xml));data=mujoco.MjData(model)
+    # The CAD zero has a 90-degree elbow bend. Human TPOSE has straight arms.
+    # Calibrate orientations at a straight-elbow pose, without changing the
+    # model coordinate zero or adding an offset to solved joint positions.
+    for side in ('left', 'right'):
+        data.qpos[model.joint(side+'_shoulder_roll_joint').qposadr[0]]=(1 if side=='left' else -1)*np.pi/2
+        data.qpos[model.joint(side+'_elbow_pitch_joint').qposadr[0]]=np.pi/2
+    mujoco.mj_forward(model,data)
     fps=1/float(re.search(r'Frame Time:\s*([\d.]+)',source.read_text()).group(1))
     p,q,slots=load(source,limit);tp,tq,ts=load(GMR/'ik_config_manager/TPOSE.bvh',1)
     lengths=compute_robot_link_lengths(cfgpath,xml)
@@ -92,5 +99,5 @@ def run(source,out,limit=None):
     solver.retarget();solver.save_results_as_csv(str(dest))
     joint_names=[model.joint(i).name for i in range(model.njnt) if model.jnt_type[i]==mujoco.mjtJoint.mjJNT_HINGE]
     (out/'joint_order.json').write_text(json.dumps(joint_names,indent=2))
-    record=dict(source=str(source),source_sha256=sha(source),output_sha256=sha(dest),frames=len(p),fps=fps,raw_human_bvh=True,root_displacement_scale=scale,axes='Y-up to Z-up then +90deg yaw; TPOSE calibrated body orientations',target_xml=str(xml),target_xml_sha256=sha(xml),retargeter_sha256=sha(RETARGET/'scripts/robot_retarget.py'),physical_tracking_validated=False,limits_from_training_audit=True,per_frame_velocity_bounds=True)
+    record=dict(source=str(source),source_sha256=sha(source),output_sha256=sha(dest),frames=len(p),fps=fps,raw_human_bvh=True,root_displacement_scale=scale,axes='Y-up to Z-up then +90deg yaw; TPOSE calibrated body orientations',target_xml=str(xml),target_xml_sha256=sha(xml),retargeter_sha256=sha(RETARGET/'scripts/robot_retarget.py'),physical_tracking_validated=False,elbow_zero='CAD bent elbow is q=0; TPOSE calibrated with shoulders abducted +/-pi/2 and elbows q=+pi/2',limits_from_training_audit=True,per_frame_velocity_bounds=True)
     (out/(source.stem+'.json')).write_text(json.dumps(record,indent=2));return record

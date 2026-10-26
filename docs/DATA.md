@@ -1,13 +1,28 @@
-# Mojia data
+# Mojia reference data
 
-Input is the original human LAFAN BVH dataset. Retargeting uses external `robot_retargeter` (including its Mojia v3.8 XML/config) and GMR's BVH reader/TPOSE. Set their paths explicitly; they are not vendored into this repository.
+The active data contains all 40 original human LAFAN clips, retargeted to the
+short-arm Mojia v3.8 model and resampled to 50 Hz. No clips are filtered.
+Elbow zero is bent approximately 90 degrees; T-pose orientation calibration uses
+straight elbows (+pi/2) and abducted shoulders. Joint coordinates receive no
+constant post-processing offset.
+
+Retargeting uses external robot_retargeter and GMR. The local retargeting
+Python environment uses MuJoCo 3.9; preparation/training use MuJoCo 3.8.1.
+Set `ROBOT_RETARGETER` and `GMR_ROOT` before retargeting. External projects are
+not vendored. Use `scripts/data.py retarget --help` for individual BVHs.
+
+Prepare from the retained calibrated CSVs in the training environment:
 
 ```bash
-export ROBOT_RETARGETER=/path/to/robot_retargeter
-export GMR_ROOT=/path/to/GMR
-python scripts/data.py pipeline --source /path/to/lafan_bvh --raw-out data/mojia_raw --out data/mojia
+python scripts/data.py prepare --source data/mojia_raw \
+  --joint-order data/mojia_raw/joint_order.json --fps 30.000300003000028 \
+  --audit configs/robot.json --correct-floor-clearance-m .002 \
+  --out data/mojia_new
 ```
 
-The retargeting environment needs Mink and the version of MuJoCo supported by robot_retargeter (the local data was generated using MuJoCo 3.9.0, while training uses 3.8.1). If using separate environments, generate CSVs with `scripts/data.py retarget`, then use `python scripts/data.py prepare --source data/mojia_raw --joint-order data/mojia_raw/joint_order.json --fps 30.000300003 --out data/mojia --correct-floor-clearance-m .002` in the training environment.
-
-The IK solver enforces the target joint limits and per-frame velocity bounds. Floor corrections are recorded; the existing corpus includes corrections up to approximately 0.484 m, so kinematic validity is not a guarantee of physical trackability. No claim of hardware readiness is made.
+Outputs must use a fresh directory. First-order endpoint secants avoid velocity
+extrapolation; interior differences remain centered. Penetrating reference poses
+receive an explicitly logged upward translation, with velocities recomputed.
+The current corpus still has leg collisions and up to 39.7cm floor correction.
+Full inspection is retained at `runs/mojia_audit/index.html`; kinematic validity
+alone does not establish dynamic trackability. No hardware validation is claimed.

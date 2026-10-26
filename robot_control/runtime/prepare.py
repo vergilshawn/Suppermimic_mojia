@@ -63,10 +63,12 @@ def read_motion(path, joint_names, target_names, fps=None):
     states = np.zeros((len(target), 82), dtype=np.float32)
     states[:, :3] = pose[:, :3]
     states[:, 3:7] = rotations.as_quat()[:, [3, 0, 1, 2]]
-    states[:, 7:10] = np.gradient(pose[:, :3], .02, axis=0, edge_order=2)
+    states[:, 7:10] = np.gradient(pose[:, :3], .02, axis=0, edge_order=1)
     states[:, 10:13] = rotations.inv().apply(omega_world)
     states[:, 13:36] = pose[:, 3:]
-    states[:, 36:59] = np.gradient(pose[:, 3:], .02, axis=0, edge_order=2)
+    # Piecewise-linear resampling uses one-sided secants at clip endpoints;
+    # quadratic endpoint extrapolation can exceed every actual segment speed.
+    states[:, 36:59] = np.gradient(pose[:, 3:], .02, axis=0, edge_order=1)
     metadata = dict(source=str(path.resolve()), source_sha256=sha(path), source_frames=len(q),
                     source_fps=fps, target_fps=50, joint_mapping=mapping.to_dict(),
                     source_quaternion_norm_max_error=float(np.max(np.abs(norms - 1))),
@@ -129,7 +131,7 @@ def validate_states(states, control):
 
 
 def prepare(source, out, joint_names=None, fps=None, *, synthetic_standing=False, frames=128,
-            floor_clearance_m=None):
+            floor_clearance_m=None, audit=None):
     out = Path(out).resolve()
     if not out.is_relative_to(BASE):
         raise ValueError("Prepared output must remain inside isolated migration/mojia_v3_8")
@@ -137,7 +139,7 @@ def prepare(source, out, joint_names=None, fps=None, *, synthetic_standing=False
         raise FileExistsError("Use a fresh prepared directory; existing data is never overwritten")
     if floor_clearance_m is not None and (not np.isfinite(floor_clearance_m) or not 0 <= floor_clearance_m <= .02):
         raise ValueError("Explicit floor-clearance correction must be between zero and .02m")
-    control = audited_control()
+    control = audited_control() if audit is None else audited_control(audit)
     model = build_model(control)
     control["body_names"] = [model.body(i).name for i in range(1, model.nbody)]
     if synthetic_standing:
@@ -170,7 +172,7 @@ def prepare(source, out, joint_names=None, fps=None, *, synthetic_standing=False
             shift = np.where(penetration < 0., -penetration + floor_clearance_m, 0.)
             states = states.copy()
             states[:, 2] += shift
-            states[:, 7:10] = np.gradient(states[:, :3].astype(np.float64), .02, axis=0, edge_order=2)
+            states[:, 7:10] = np.gradient(states[:, :3].astype(np.float64), .02, axis=0, edge_order=1)
             values = kinematics(model, control, states)
             values["original_root_pos"] = original_root
             values["root_height_correction_m"] = shift.astype(np.float32)
@@ -202,6 +204,7 @@ def prepare(source, out, joint_names=None, fps=None, *, synthetic_standing=False
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path)
+    parser.add_argument("--audit", type=Path, help="Robot parameter contract, including nominal joint zero")
     parser.add_argument("--joint-order", type=Path)
     parser.add_argument("--fps", type=float)
     parser.add_argument("--out", type=Path, required=True)
@@ -219,7 +222,7 @@ def main(argv=None):
         parser.error("Real references require --source and --joint-order")
     manifest = prepare(args.source, args.out, names, args.fps,
                        synthetic_standing=args.synthetic_standing, frames=args.frames,
-                       floor_clearance_m=args.correct_floor_clearance_m)
+                       floor_clearance_m=args.correct_floor_clearance_m, audit=args.audit)
     print(json.dumps(dict(output=str(args.out), clips=len(manifest["clips"]),
                           synthetic_only=manifest["synthetic_only"],
                           all_clips_kinematically_eligible=manifest["all_clips_kinematically_eligible"])))
