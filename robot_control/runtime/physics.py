@@ -13,6 +13,129 @@ import math
 import torch
 
 
+class CPUVectorPhysics:
+    """Independent serial MuJoCo worlds for bounded CPU correctness tests.
+
+    Uses named qpos/dof/actuator maps and the same PD substeps as WarpPhysics.
+    It is not a throughput substitute for GPU training.
+    """
+    def __init__(self, env, num_envs=1, device="cpu", **unused):
+        import mujoco
+        import numpy as np
+        self.mujoco, self.np = mujoco, np
+        self.device = torch.device(device)
+        if self.device.type != "cpu":
+            raise ValueError("CPUVectorPhysics only accepts CPU tensors")
+        self.num_envs = int(num_envs)
+        if self.num_envs < 1 or self.num_envs > 64:
+            raise ValueError("CPU verification supports 1..64 worlds; select Warp for scale")
+        self.layout = env.layout
+        self.contract = dict(env.contract)
+        self.substeps = round(env.control["control_dt"] / env.control["physics_dt"])
+        if not math.isclose(self.substeps * env.control["physics_dt"], env.control["control_dt"], abs_tol=1e-10):
+            raise ValueError("Control interval must be an integer multiple of physics interval")
+        if env.control.get("actuator_delay_physics_steps", 0) != 0:
+            raise ValueError("Delayed control requires a different state contract")
+        self.models = [copy.copy(env.model) for _ in range(self.num_envs)]
+        self.datas = [mujoco.MjData(model) for model in self.models]
+        self.qids, self.vids, self.aids = env.qids.copy(), env.vids.copy(), env.actuator_ids.copy()
+        self.torso, self.nominal_com = env.torso, env.nominal_com.copy()
+        self.nominal, self.scale, self.kp, self.kd, self.effort = (
+            x.copy() for x in (env.nominal, env.scale, env.kp, env.kd, env.effort))
+        self.context = torch.zeros(self.num_envs, self.layout.context)
+        self.context[:, 0] = 1.
+        self._last_action = torch.zeros(self.num_envs, self.layout.dof)
+        self.reset(torch.arange(self.num_envs), env.references[0, 0].expand(self.num_envs, -1), self.context.clone())
+
+    def _validate(self, value, shape, name):
+        if value.device.type != "cpu" or value.dtype != torch.float32 or tuple(value.shape) != tuple(shape):
+            raise ValueError(f"{name} requires CPU float32, shape {shape}")
+        if not torch.isfinite(value).all():
+            raise FloatingPointError(f"Nonfinite {name}")
+
+    @torch.no_grad()
+    def reset(self, indices, states, contexts):
+        if indices.dtype != torch.long or indices.device.type != "cpu" or indices.ndim != 1:
+            raise ValueError("Indices must be one-dimensional CPU long tensor")
+        count = indices.numel()
+        self._validate(states, (count, self.layout.state), "states")
+        self._validate(contexts, (count, self.layout.context), "contexts")
+        if len(indices.unique()) != count or bool(((indices < 0) | (indices >= self.num_envs)).any()):
+            raise ValueError("Reset indices must be unique and in range")
+        if bool((contexts[:, 0] < 0).any()):
+            raise ValueError("Negative friction")
+        mj, n = self.mujoco, self.layout.dof
+        contexts = contexts.clone()
+        self.context[indices] = contexts
+        for row, index in enumerate(indices.tolist()):
+            model, data = self.models[index], self.datas[index]
+            state, context = states[row].numpy(), contexts[row].numpy()
+            mj.mj_resetData(model, data)
+            model.geom_friction[:, 0] = context[0]
+            model.body_ipos[:] = self.nominal_com
+            model.body_ipos[self.torso] += context[n + 1:n + 4]
+            mj.mj_setConst(model, data)
+            data.qpos[:7], data.qpos[self.qids] = state[:7], state[13:13 + n]
+            data.qvel[:6], data.qvel[self.vids] = state[7:13], state[13 + n:13 + 2 * n]
+            self._last_action[index] = states[row, 13 + 2 * n:]
+            mj.mj_forward(model, data)
+
+    def state(self):
+        return torch.tensor(self.np.stack([self.np.concatenate((data.qpos[:7], data.qvel[:6],
+            data.qpos[self.qids], data.qvel[self.vids], self._last_action[i].numpy()))
+            for i, data in enumerate(self.datas)]), dtype=torch.float32)
+
+    @torch.no_grad()
+    def step(self, actions):
+        self._validate(actions, (self.num_envs, self.layout.dof), "actions")
+        mj, np = self.mujoco, self.np
+        saturated = np.zeros((self.num_envs, self.layout.dof), dtype=bool)
+        distances, contacts, constraints = [], [], []
+        for i, (model, data) in enumerate(zip(self.models, self.datas)):
+            target = self.nominal + self.scale * actions[i].numpy()
+            offset = self.context[i, 1:1 + self.layout.dof].numpy()
+            for _ in range(self.substeps):
+                torque = self.kp * (target - data.qpos[self.qids] - offset) - self.kd * data.qvel[self.vids]
+                saturated[i] |= np.abs(torque) >= .95 * self.effort
+                data.ctrl[self.aids] = np.clip(torque, -self.effort, self.effort)
+                mj.mj_step(model, data)
+            mj.mj_forward(model, data)
+            contacts.append(data.ncon)
+            constraints.append(data.nefc)
+            distances.append(min([0.] + [c.dist for c in data.contact]))
+        self._last_action.copy_(actions)
+        states = self.state()
+        if not states.isfinite().all() or bool((states[:, 7:13 + 2 * self.layout.dof].abs() > 1e5).any()):
+            raise FloatingPointError("Nonfinite or divergent CPU transition")
+        return states, dict(torque_saturated=torch.tensor(saturated.any(axis=1)),
+                            torque_saturated_joints=torch.tensor(saturated.sum(axis=1)),
+                            min_contact_distance_m=torch.tensor(distances, dtype=torch.float32),
+                            contact_count=torch.tensor(contacts), constraint_count=torch.tensor(constraints))
+
+    def state_dict(self):
+        spec = self.mujoco.mjtState.mjSTATE_INTEGRATION
+        values = []
+        for model, data in zip(self.models, self.datas):
+            state = self.np.empty(self.mujoco.mj_stateSize(model, spec))
+            self.mujoco.mj_getState(model, data, state, spec)
+            values.append(torch.from_numpy(state))
+        return dict(schema=1, backend="CPUVectorPhysics", contract=self.contract, num_envs=self.num_envs,
+                    context=self.context.clone(), previous_action=self._last_action.clone(),
+                    integration=torch.stack(values),
+                    qacc=torch.tensor(self.np.stack([d.qacc.copy() for d in self.datas])))
+
+    @torch.no_grad()
+    def load_state_dict(self, snapshot):
+        if snapshot.get("schema") != 1 or snapshot.get("backend") != "CPUVectorPhysics" or snapshot["contract"] != self.contract or snapshot["num_envs"] != self.num_envs:
+            raise ValueError("Incompatible CPU physics checkpoint")
+        self.reset(torch.arange(self.num_envs), self.state(), snapshot["context"])
+        self._last_action.copy_(snapshot["previous_action"])
+        for i, (model, data) in enumerate(zip(self.models, self.datas)):
+            self.mujoco.mj_setState(model, data, snapshot["integration"][i].numpy(), self.mujoco.mjtState.mjSTATE_INTEGRATION)
+            self.mujoco.mj_forward(model, data)
+            data.qacc[:] = snapshot["qacc"][i].numpy()
+
+
 def _kernels(wp):
     # Define lazily so CPU-only installations can still import training helpers.
     @wp.kernel(module="unique", enable_backward=False)
@@ -20,11 +143,12 @@ def _kernels(wp):
            action: wp.array2d[float], context: wp.array2d[float],
            nominal: wp.array[float], scale: wp.array[float],
            kp: wp.array[float], kd: wp.array[float], effort: wp.array[float],
+           qids: wp.array[int], vids: wp.array[int], aids: wp.array[int],
            ctrl: wp.array2d[float], saturated: wp.array2d[int]):
         w, j = wp.tid()
         target = nominal[j] + scale[j] * action[w, j]
-        torque = kp[j] * (target - qpos[w, 7+j] - context[w, 1+j]) - kd[j] * qvel[w, 6+j]
-        ctrl[w, j] = wp.clamp(torque, -effort[j], effort[j])
+        torque = kp[j] * (target - qpos[w, qids[j]] - context[w, 1+j]) - kd[j] * qvel[w, vids[j]]
+        ctrl[w, aids[j]] = wp.clamp(torque, -effort[j], effort[j])
         if wp.abs(torque) >= 0.95 * effort[j]:
             saturated[w, j] = 1
 
@@ -50,12 +174,12 @@ def _kernels(wp):
 
 
 class WarpPhysics:
-    """Persistent independent worlds, using the same clipped PD as G1Tracking.
+    """Persistent independent worlds, using the same clipped PD as MojiaTracking.
 
     ``reset(indices, states, contexts)`` takes selected world IDs and tensors
-    shaped (K,100), (K,33). State ordering is exactly ``kernel.STATE``. Context
-    is friction, 29 encoder calibration offsets, torso COM displacement xyz.
-    ``step(actions)`` accepts (N,29) and returns newly allocated (N,100) states
+    shaped (K,82), (K,27). State ordering is exactly ``kernel.STATE``. Context
+    is friction, 23 encoder calibration offsets, torso COM displacement xyz.
+    ``step(actions)`` accepts (N,23) and returns newly allocated (N,82) states
     and per-world diagnostic tensors. Returned states do not alias simulator
     memory and are safe to retain as transition endpoints.
 
@@ -81,8 +205,8 @@ class WarpPhysics:
         if not math.isclose(self.substeps*float(env.control["physics_dt"]),
                             float(env.control["control_dt"]), abs_tol=1e-10):
             raise ValueError("Control interval must contain an integer number of physics steps")
-        if (env.model.nq, env.model.nv, env.model.nu) != (36,35,29):
-            raise ValueError("WarpPhysics currently implements the G1 29 DOF state convention")
+        if (env.model.nq, env.model.nv, env.model.nu) != (30,29,23):
+            raise ValueError("WarpPhysics currently implements the Mojia 23 DOF state convention")
         wp.init()
         self._warp_stream = wp.Stream(str(self.device))
         self._torch_stream = wp.stream_to_torch(self._warp_stream)
@@ -94,15 +218,19 @@ class WarpPhysics:
         self.cpu_model.body_ipos[:] = env.nominal_com
         self.torso = env.torso
         self._const_graph = self._step_graph = None
-        self.context = torch.zeros(self.num_envs,33,device=self.device)
+        self.context = torch.zeros(self.num_envs,27,device=self.device)
         self.context[:,0] = 1.
-        self._actions = torch.zeros(self.num_envs,29,device=self.device)
+        self._actions = torch.zeros(self.num_envs,23,device=self.device)
         self._last_action = torch.zeros_like(self._actions)
-        self._saturated = torch.zeros(self.num_envs,29,device=self.device,dtype=torch.int32)
+        self._saturated = torch.zeros(self.num_envs,23,device=self.device,dtype=torch.int32)
         self._contact_count = torch.zeros(self.num_envs,device=self.device,dtype=torch.int32)
         self._min_distance = torch.zeros(self.num_envs,device=self.device)
         self._overflow = torch.zeros(self.num_envs,device=self.device,dtype=torch.int32)
         self._mask = torch.zeros(self.num_envs,device=self.device,dtype=torch.bool)
+        self._qids = torch.as_tensor(env.qids, device=self.device, dtype=torch.long)
+        self._vids = torch.as_tensor(env.vids, device=self.device, dtype=torch.long)
+        self._addresses = [wp.from_torch(torch.as_tensor(v, device=self.device, dtype=torch.int32))
+                           for v in (env.qids, env.vids, env.actuator_ids)]
         self._nominal_com = torch.as_tensor(env.nominal_com,device=self.device,dtype=torch.float32)
         with self._scope():
             self.model = mjw.put_model(self.cpu_model)
@@ -170,27 +298,28 @@ class WarpPhysics:
         if indices.device != self.device or indices.ndim != 1 or indices.dtype != torch.long:
             raise ValueError("indices must be a 1-D long tensor on the physics device")
         n = indices.numel()
-        self._validate(states,(n,100),"states")
-        self._validate(contexts,(n,33),"contexts")
+        self._validate(states,(n,82),"states")
+        self._validate(contexts,(n,27),"contexts")
         if not n:
             return
         if bool(((indices < 0) | (indices >= self.num_envs)).any()) or len(indices.unique()) != n:
             raise ValueError("Reset indices must be unique and in range")
         if bool((contexts[:,0] < 0).any()):
             raise ValueError("Negative friction")
+        contexts = contexts.clone()
         with self._scope():
             self._mask.zero_();self._mask[indices] = True
             self.mjw.reset_data(self.model,self.data,self._wp_mask)
             self.context[indices] = contexts
             self._overflow[indices] = 0
             self.qpos[indices,:7] = states[:,:7]
-            self.qpos[indices,7:] = states[:,13:42]
+            self.qpos[indices[:,None],self._qids[None,:]] = states[:,13:36]
             self.qvel[indices,:6] = states[:,7:13]
-            self.qvel[indices,6:] = states[:,42:71]
-            self._last_action[indices] = states[:,71:100]
+            self.qvel[indices[:,None],self._vids[None,:]] = states[:,36:59]
+            self._last_action[indices] = states[:,59:82]
             self._friction[indices,:,0] = contexts[:,0,None]
             self._body_ipos[indices] = self._nominal_com
-            self._body_ipos[indices,self.torso] += contexts[:,30:33]
+            self._body_ipos[indices,self.torso] += contexts[:,24:27]
             if self._const_graph is None:
                 self.mjw.set_const_0(self.model,self.data)
             else:
@@ -200,8 +329,8 @@ class WarpPhysics:
 
     def state(self):
         """Return a snapshot, including the actually executed previous action."""
-        return torch.cat((self.qpos[:,:7],self.qvel[:,:6],self.qpos[:,7:],
-                          self.qvel[:,6:],self._last_action),dim=-1)
+        return torch.cat((self.qpos[:,:7],self.qvel[:,:6],self.qpos[:,self._qids],
+                          self.qvel[:,self._vids],self._last_action),dim=-1)
 
     def state_dict(self):
         """Serialize integration state, not just qpos/qvel.
@@ -233,7 +362,7 @@ class WarpPhysics:
         context = snapshot["context"].to(self.device)
         previous = snapshot["previous_action"].to(self.device)
         qpos,qvel = integration["qpos"].to(self.device),integration["qvel"].to(self.device)
-        states = torch.cat((qpos[:,:7],qvel[:,:6],qpos[:,7:],qvel[:,6:],previous),-1)
+        states = torch.cat((qpos[:,:7],qvel[:,:6],qpos[:,self._qids],qvel[:,self._vids],previous),-1)
         self.reset(torch.arange(self.num_envs,device=self.device),states,context)
         with self._scope():
             for name,value in integration.items():
@@ -251,8 +380,8 @@ class WarpPhysics:
         wp,mjw = self.wp,self.mjw
         self._wp_saturated.zero_();self._wp_overflow.zero_()
         for _ in range(self.substeps):
-            wp.launch(self._pd,dim=(self.num_envs,29),inputs=[self.data.qpos,self.data.qvel,
-                      self._wp_actions,self._wp_context,*self._control],
+            wp.launch(self._pd,dim=(self.num_envs,23),inputs=[self.data.qpos,self.data.qvel,
+                      self._wp_actions,self._wp_context,*self._control,*self._addresses],
                       outputs=[self.data.ctrl,self._wp_saturated])
             mjw.step(self.model,self.data)
             wp.launch(self._capacities,dim=self.num_envs,inputs=[self.data.nacon,self.data.nefc,
@@ -273,7 +402,7 @@ class WarpPhysics:
 
     @torch.no_grad()
     def step(self,actions):
-        self._validate(actions,(self.num_envs,29),"actions")
+        self._validate(actions,(self.num_envs,23),"actions")
         with self._scope():
             self._actions.copy_(actions)
             if self._step_graph is None:
@@ -283,7 +412,7 @@ class WarpPhysics:
             self._assert_capacity()
             self._last_action.copy_(actions)
             state = self.state()
-            if not torch.isfinite(state).all() or bool((state[:,7:71].abs() > 1e5).any()):
+            if not torch.isfinite(state).all() or bool((state[:,7:59].abs() > 1e5).any()):
                 raise FloatingPointError("Nonfinite or divergent Warp physical transition")
             diagnostics = dict(torque_saturated=self._saturated.any(dim=-1).clone(),
                                torque_saturated_joints=self._saturated.sum(dim=-1),
@@ -292,65 +421,3 @@ class WarpPhysics:
                                constraint_count=self.wp.to_torch(self.data.nefc).clone())
             return state,diagnostics
 
-
-def main():
-    """Bounded physics-only verification, never starts a training job."""
-    import argparse
-    import json
-    from pathlib import Path
-    import time
-    from .g1_env import G1Tracking, ROOT
-
-    parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("--assets",type=Path,default=ROOT/"data/g1")
-    parser.add_argument("--worlds",type=int,default=4096)
-    parser.add_argument("--steps",type=int,default=8)
-    parser.add_argument("--out",type=Path,required=True)
-    args = parser.parse_args()
-    torch.set_num_threads(2)
-    torch.manual_seed(42)
-    env = G1Tracking(args.assets)
-    torch.cuda.reset_peak_memory_stats()
-    free_before,total = torch.cuda.mem_get_info()
-    started = time.monotonic()
-    physics = WarpPhysics(env,args.worlds)
-    torch.cuda.synchronize()
-    creation_s = time.monotonic()-started
-    context = torch.zeros(args.worlds,33,device="cuda")
-    context[:,0].uniform_(.3,1.2)
-    context[:,1:30].uniform_(-.01,.01)
-    context[:,30].uniform_(-.025,.025)
-    context[:,31:33].uniform_(-.05,.05)
-    initial = env.references[0,0].to("cuda").expand(args.worlds,-1).clone()
-    physics.reset(torch.arange(args.worlds,device="cuda"),initial,context)
-    torch.cuda.synchronize()
-    free_after_creation,_ = torch.cuda.mem_get_info()
-    action = torch.zeros(args.worlds,29,device="cuda")
-    started = time.monotonic()
-    for _ in range(args.steps):
-        state,diagnostics = physics.step(action)
-    torch.cuda.synchronize()
-    elapsed = time.monotonic()-started
-    free_after_steps,_ = torch.cuda.mem_get_info()
-    result = dict(status="passed",kind="bounded_physics_only",worlds=args.worlds,
-                  control_steps=args.steps,physics_substeps=physics.substeps*args.steps,
-                  device=torch.cuda.get_device_name(),finite=bool(state.isfinite().all()),
-                  control_dt=env.control["control_dt"],physics_dt=env.control["physics_dt"],
-                  creation_s=creation_s,steps_s=elapsed,
-                  physical_transitions_per_s=args.steps*args.worlds/elapsed,
-                  incremental_cuda_memory_creation_bytes=free_before-free_after_creation,
-                  incremental_cuda_memory_after_steps_bytes=free_before-free_after_steps,
-                  total_device_bytes=total,torch_peak_allocated_bytes=torch.cuda.max_memory_allocated(),
-                  max_constraint_count=int(diagnostics["constraint_count"].max()),
-                  max_contact_count=int(diagnostics["contact_count"].max()),
-                  min_contact_distance_m=float(diagnostics["min_contact_distance_m"].min()),
-                  context_ranges=dict(friction=[float(context[:,0].min()),float(context[:,0].max())],
-                                      com_x=[float(context[:,30].min()),float(context[:,30].max())]),
-                  note="Physics only; policy inference, rewards and replay transfers are excluded.")
-    args.out.parent.mkdir(parents=True,exist_ok=True)
-    args.out.write_text(json.dumps(result,indent=2)+"\n")
-    print(json.dumps(result,indent=2))
-
-
-if __name__ == "__main__":
-    main()

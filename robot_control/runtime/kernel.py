@@ -1,246 +1,199 @@
-"""G1 differentiable dynamics, analytical full-body reward and BPTT kernels."""
+"""Dimension-generic differentiable kinematics, reward, and gradient primitives.
+
+Independent runtime: no imports from the running G1 training namespace.
+State is canonical named-joint order, not MuJoCo's internal joint order.
+"""
+from contextlib import contextmanager
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
-
-from .optim import frozen, lambda_returns
-
-N = 29
-DYNAMIC, STATE, OBS, CONTEXT = 71, 100, 93, 33
-Q, DQ, LAST = slice(13, 42), slice(42, 71), slice(71, 100)
+from ..robot_layout import RobotLayout
 
 
-def mlp(inputs, outputs, widths):
-    layers = []
+def layout_of(state):
+    if (state.shape[-1]-13)%3 or state.shape[-1]<=13:
+        raise ValueError('Expected root13 + q,dq,last_action in canonical joint order')
+    return RobotLayout((state.shape[-1]-13)//3)
+
+
+def spans(state):
+    n=layout_of(state).dof
+    return slice(13,13+n),slice(13+n,13+2*n),slice(13+2*n,13+3*n)
+
+
+def mlp(inputs,outputs,widths):
+    layers=[]
     for width in widths:
-        layers.extend((nn.Linear(inputs, width), nn.ELU()))
-        inputs = width
-    return nn.Sequential(*layers, nn.Linear(inputs, outputs))
+        layers.extend((nn.Linear(inputs,width),nn.ELU()));inputs=width
+    return nn.Sequential(*layers,nn.Linear(inputs,outputs))
 
 
 def rotation(q):
-    w, x, y, z = F.normalize(q, dim=-1).unbind(-1)
-    return torch.stack((1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w),
-                        2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w),
-                        2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)), -1).reshape(*q.shape[:-1], 3, 3)
+    w,x,y,z=F.normalize(q,dim=-1).unbind(-1)
+    return torch.stack((1-2*(y*y+z*z),2*(x*y-z*w),2*(x*z+y*w),
+                        2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w),
+                        2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)),-1).reshape(*q.shape[:-1],3,3)
 
 
-def apply(r, v):
-    return (r @ v.unsqueeze(-1)).squeeze(-1)
+def apply(r,v):return (r@v.unsqueeze(-1)).squeeze(-1)
 
 
-def proprio(state, nominal, context, noise=False):
-    r = rotation(state[..., 3:7])
-    gravity = -r[..., 2, :]
-    obs = torch.cat((state[..., Q] + context[..., 1:30] - nominal, state[..., DQ],
-                     state[..., 10:13], gravity, state[..., LAST]), -1)
+def proprio(state,nominal,context,noise=False):
+    q,dq,last=spans(state);n=nominal.shape[-1]
+    if state.shape[-1]!=13+3*n or context.shape[-1]!=n+4:
+        raise ValueError('State, nominal, and randomized context dimensions disagree')
+    r=rotation(state[...,3:7])
+    obs=torch.cat((state[...,q]+context[...,1:1+n]-nominal,state[...,dq],
+                   state[...,10:13],-r[...,2,:],state[...,last]),-1)
     if noise:
-        amplitudes = obs.new_tensor([.01]*29 + [.5]*29 + [.2]*3 + [.05]*3 + [0.]*29)
-        obs = obs + (2*torch.rand_like(obs)-1)*amplitudes
+        amplitudes=obs.new_tensor([.01]*n+[.5]*n+[.2]*3+[.05]*3+[0.]*n)
+        obs=obs+(2*torch.rand_like(obs)-1)*amplitudes
     return obs
 
 
-def goal_features(states):
-    r = rotation(states[..., 3:7])
-    return torch.cat((states[..., Q], states[..., DQ], states[..., 2:3],
-                      r[..., :, :2].flatten(-2), apply(r.transpose(-1,-2), states[..., 7:10]),
-                      states[..., 10:13]), -1)
-
-
-class Actor(nn.Module):
-    def __init__(self, history=10, future=10, encoder=(2048,1024,512,256), decoder=(2048,1024,512,256)):
-        super().__init__()
-        self.encoder = mlp(future*71, 32, encoder)
-        self.decoder = mlp(history*OBS + 32, N, decoder)
-        # Train every layer from scratch; there is no teacher or reference-action bypass.
-        nn.init.normal_(self.decoder[-1].weight, std=.001)
-        nn.init.zeros_(self.decoder[-1].bias)
-
-    def forward(self, history, future):
-        latent = self.encoder(future).tanh()
-        return self.decoder(torch.cat((history.flatten(-2), latent), -1))
-
-
-class Dynamics(nn.Module):
-    def __init__(self, widths=(2048,2048,2048)):
-        super().__init__()
-        self.net = mlp(STATE+N+CONTEXT, DYNAMIC, widths)
-        self.register_buffer("center", torch.zeros(STATE))
-        self.register_buffer("scale", torch.ones(STATE))
-        nn.init.zeros_(self.net[-1].weight)
-        nn.init.zeros_(self.net[-1].bias)
-
-    @torch.no_grad()
-    def calibrate(self, states):
-        self.center.copy_(states.mean(0))
-        self.scale.copy_(states.std(0, unbiased=False).clamp_min(.1))
-
-    def forward(self, state, action, context):
-        delta = self.net(torch.cat(((state-self.center)/self.scale, action, context), -1))
-        dynamic = state[..., :DYNAMIC] + delta*self.scale[:DYNAMIC]
-        return torch.cat((dynamic[..., :3], F.normalize(dynamic[..., 3:7], dim=-1),
-                          dynamic[..., 7:], action), -1)
-
-    def error(self, predicted, truth):
-        sign = torch.where((predicted[...,3:7]*truth[...,3:7]).sum(-1,keepdim=True)<0,-1.,1.)
-        aligned = torch.cat((truth[...,:3], truth[...,3:7]*sign, truth[...,7:DYNAMIC]),-1)
-        return ((predicted[...,:DYNAMIC]-aligned)/self.scale[:DYNAMIC]).square().mean(-1)
-
-
 class Kinematics(nn.Module):
-    """Body-origin positions, rotations and velocities; exact for this hinge tree.
-
-    Reject unsupported trees rather than silently approximating MuJoCo kinematics.
-    """
-    def __init__(self, model):
+    """One free root and arbitrary named hinge order; fixed bodies/anchors allowed."""
+    def __init__(self,model,qids=None,vids=None):
         super().__init__()
-        import numpy as np
-        if model.nq != 36 or model.nv != 35 or abs(model.jnt_pos).max() != 0 or abs(model.qpos0[7:]).max() != 0:
-            raise ValueError("Expected one free root and 29 zero-anchor, zero-reference hinges")
-        self.parents = model.body_parentid.tolist()
-        self.joints = []
+        qids=np.asarray(qids if qids is not None else np.arange(7,model.nq),dtype=int)
+        vids=np.asarray(vids if vids is not None else np.arange(6,model.nv),dtype=int)
+        self.layout=RobotLayout(len(qids))
+        if model.nq!=7+len(qids) or model.nv!=6+len(qids):
+            raise ValueError('Require one free root and N actuated hinges')
+        if sorted(qids.tolist())!=list(range(7,model.nq)) or sorted(vids.tolist())!=list(range(6,model.nv)):
+            raise ValueError('Joint addresses must cover all non-root coordinates exactly once')
+        self.parents=model.body_parentid.tolist();self.joints=[]
+        root=np.flatnonzero(model.jnt_type==0)
+        if len(root)!=1 or model.jnt_bodyid[root[0]]!=1:
+            raise ValueError('Require exactly one free joint on body 1')
+        lookup={int(q):i for i,q in enumerate(qids)}
+        axes=np.zeros((len(qids),3));anchors=np.zeros_like(axes);refs=np.zeros(len(qids))
         for body in range(model.nbody):
-            ids = np.flatnonzero(model.jnt_bodyid == body)
-            if body > 1 and (len(ids) > 1 or (len(ids) and int(model.jnt_type[ids[0]]) != 3)):
-                raise ValueError("Unsupported joint tree")
-            self.joints.append(int(ids[0])-1 if len(ids) and body > 1 else -1)
-        for name, value in (("offset", model.body_pos), ("fixed_quat", model.body_quat),
-                            ("axis", model.jnt_axis[1:])):
-            self.register_buffer(name, torch.tensor(value, dtype=torch.float32))
+            ids=np.flatnonzero(model.jnt_bodyid==body)
+            if body<=1:
+                self.joints.append(-1);continue
+            if len(ids)>1 or (len(ids) and int(model.jnt_type[ids[0]])!=3):
+                raise ValueError('Only fixed bodies and single-hinge child bodies are supported')
+            if not len(ids):self.joints.append(-1);continue
+            joint=int(ids[0]);index=lookup[int(model.jnt_qposadr[joint])]
+            if int(model.jnt_dofadr[joint])!=vids[index]:
+                raise ValueError('qids and vids do not refer to the same canonical joint')
+            self.joints.append(index);axes[index]=model.jnt_axis[joint]
+            anchors[index]=model.jnt_pos[joint];refs[index]=model.qpos0[qids[index]]
+        for name,value in (('offset',model.body_pos),('fixed_quat',model.body_quat),
+                           ('axis',axes),('anchor',anchors),('reference_q',refs)):
+            self.register_buffer(name,torch.tensor(value,dtype=torch.float32))
 
-    def forward(self, state):
-        batch = state.shape[:-1]
-        eye = torch.eye(3, dtype=state.dtype, device=state.device).expand(*batch,3,3)
-        zeros = torch.zeros(*batch,3,dtype=state.dtype,device=state.device)
-        positions, matrices, velocities, omegas = [zeros], [eye], [zeros], [zeros]
-        fixed = rotation(self.fixed_quat.to(state))
-        for b in range(1, len(self.parents)):
-            if b == 1:
-                pos, mat = state[...,:3], rotation(state[...,3:7])
-                vel, omega = state[...,7:10], apply(mat,state[...,10:13])
+    def forward(self,state):
+        if state.shape[-1]!=self.layout.state:raise ValueError('FK state dimension mismatch')
+        batch=state.shape[:-1];n=self.layout.dof
+        eye=torch.eye(3,dtype=state.dtype,device=state.device).expand(*batch,3,3)
+        zeros=state.new_zeros(*batch,3)
+        positions,matrices,velocities,omegas=[zeros],[eye],[zeros],[zeros]
+        fixed=rotation(self.fixed_quat.to(state))
+        for body in range(1,len(self.parents)):
+            if body==1:
+                pos,mat=state[...,:3],rotation(state[...,3:7])
+                vel,omega=state[...,7:10],apply(mat,state[...,10:13])
             else:
-                p = self.parents[b]
-                displacement = apply(matrices[p],self.offset[b].to(state).expand(*batch,3))
-                pos = positions[p] + displacement
-                mat = matrices[p] @ fixed[b]
-                vel = velocities[p] + torch.linalg.cross(omegas[p],displacement)
-                omega = omegas[p]
-                j = self.joints[b]
-                if j >= 0:
-                    axis = self.axis[j].to(state).expand(*batch,3)
-                    world_axis = apply(mat,axis)
-                    angle = state[...,13+j]/2
-                    quat = torch.cat((angle.cos()[...,None],axis*angle.sin()[...,None]),-1)
-                    mat = mat @ rotation(quat)
-                    omega = omega + world_axis*state[...,42+j:43+j]
-            positions.append(pos); matrices.append(mat); velocities.append(vel); omegas.append(omega)
+                parent=self.parents[body]
+                displacement=apply(matrices[parent],self.offset[body].to(state).expand(*batch,3))
+                unrotated=positions[parent]+displacement
+                mat=matrices[parent]@fixed[body];omega=omegas[parent]
+                index=self.joints[body]
+                if index>=0:
+                    axis=self.axis[index].to(state).expand(*batch,3)
+                    anchor=self.anchor[index].to(state).expand(*batch,3)
+                    joint_world=unrotated+apply(mat,anchor)
+                    world_axis=apply(mat,axis)
+                    angle=(state[...,13+index]-self.reference_q[index])/2
+                    quat=torch.cat((angle.cos()[...,None],axis*angle.sin()[...,None]),-1)
+                    mat=mat@rotation(quat)
+                    pos=joint_world-apply(mat,anchor)
+                    joint_omega=world_axis*state[...,13+n+index:14+n+index]
+                    vel=(velocities[parent]+torch.linalg.cross(omegas[parent],pos-positions[parent])
+                         +torch.linalg.cross(joint_omega,pos-joint_world))
+                    omega=omega+joint_omega
+                else:
+                    pos=unrotated
+                    vel=velocities[parent]+torch.linalg.cross(omegas[parent],displacement)
+            positions.append(pos);matrices.append(mat);velocities.append(vel);omegas.append(omega)
         return tuple(torch.stack(items,-3 if i==1 else -2) for i,items in
                      enumerate((positions[1:],matrices[1:],velocities[1:],omegas[1:])))
 
 
 def orientation_error(a,b):
-    """Squared geodesic angle; finite derivative at identity (no acos singularity)."""
-    relative = a @ b.transpose(-1,-2)
-    cos = ((relative.diagonal(dim1=-2,dim2=-1).sum(-1)-1)/2).clamp(-1,1)
-    # acos^2 approaches 2*(1-cos) at identity.
-    safe = cos.clamp(-1+1e-6,1-1e-6)
-    return torch.where(cos > .9999, 2*(1-cos), torch.acos(safe).square())
+    relative=a@b.transpose(-1,-2)
+    cosine=((relative.diagonal(dim1=-2,dim2=-1).sum(-1)-1)/2).clamp(-1,1)
+    safe=cosine.clamp(-1+1e-6,1-1e-6)
+    return torch.where(cosine>.9999,2*(1-cosine),torch.acos(safe).square())
 
 
 class Task(nn.Module):
-    def __init__(self, model, nominal, tracked):
-        super().__init__()
-        self.fk = Kinematics(model)
-        self.tracked = tracked
-        self.register_buffer("nominal",torch.tensor(nominal,dtype=torch.float32))
-        # BeyondMimic-style soft position limits, nominal factor 0.9 from mjlab.
-        ranges = torch.tensor(model.jnt_range[1:],dtype=torch.float32)
-        mid, half = ranges.mean(-1), (ranges[:,1]-ranges[:,0])*.45
-        self.register_buffer("lower",mid-half)
-        self.register_buffer("upper",mid+half)
+    def __init__(self,model,nominal,tracked,qids=None,vids=None,dt=.02):
+        super().__init__();self.layout=RobotLayout(len(nominal));self.dt=float(dt)
+        qids=np.asarray(qids if qids is not None else np.arange(7,model.nq),dtype=int)
+        self.fk=Kinematics(model,qids,vids);self.tracked=list(tracked)
+        self.register_buffer('nominal',torch.tensor(nominal,dtype=torch.float32))
+        joint_for_q={int(q):i for i,q in enumerate(model.jnt_qposadr)}
+        ranges=torch.tensor(model.jnt_range[[joint_for_q[int(q)] for q in qids]],dtype=torch.float32)
+        middle,half=ranges.mean(-1),(ranges[:,1]-ranges[:,0])*.45
+        self.register_buffer('lower',middle-half);self.register_buffer('upper',middle+half)
 
-    def reward(self, state, next_state, action, reference, reference_kinematics=None):
-        p,r,v,w = self.fk(next_state)
-        rp,rr,rv,rw = self.fk(reference) if reference_kinematics is None else reference_kinematics
-        t = self.tracked
+    def reward(self,state,next_state,action,reference,reference_kinematics=None):
+        q,_,last=spans(state);p,r,v,w=self.fk(next_state)
+        rp,rr,rv,rw=self.fk(reference) if reference_kinematics is None else reference_kinematics
+        t=self.tracked
         delta=r[...,0,:,:] @ rr[...,0,:,:].transpose(-1,-2)
         yaw=torch.atan2(delta[...,1,0],delta[...,0,0]);c=yaw.cos();sn=yaw.sin();z=torch.zeros_like(c);one=torch.ones_like(c)
         heading=torch.stack((c,-sn,z,sn,c,z,z,z,one),-1).reshape(*yaw.shape,3,3)
         anchor=torch.cat((p[...,0,:2],rp[...,0,2:3]),-1)
         aligned_p=anchor[...,None,:]+apply(heading[...,None,:,:],rp-rp[...,0:1,:])
         aligned_r=heading[...,None,:,:] @ rr
-        terms = (torch.exp(-(p[...,t,:]-aligned_p[...,t,:]).square().sum(-1).mean(-1)/.3**2)
-                 +torch.exp(-orientation_error(r[...,t,:,:],aligned_r[...,t,:,:]).mean(-1)/.4**2)
-                 +torch.exp(-(v[...,t,:]-rv[...,t,:]).square().sum(-1).mean(-1))
-                 +torch.exp(-(w[...,t,:]-rw[...,t,:]).square().sum(-1).mean(-1)/3.14**2)
-                 +.5*torch.exp(-(p[...,0,:]-rp[...,0,:]).square().sum(-1)/.3**2)
-                 +.5*torch.exp(-orientation_error(r[...,0,:,:],rr[...,0,:,:])/.4**2))
-        limits = (F.relu(self.lower-next_state[...,Q])+F.relu(next_state[...,Q]-self.upper)).sum(-1)
-        smooth = (action-state[...,LAST]).square().sum(-1)
-        return .02*(terms-2*limits-.1*smooth)
+        terms=(torch.exp(-(p[...,t,:]-aligned_p[...,t,:]).square().sum(-1).mean(-1)/.3**2)
+               +torch.exp(-orientation_error(r[...,t,:,:],aligned_r[...,t,:,:]).mean(-1)/.4**2)
+               +torch.exp(-(v[...,t,:]-rv[...,t,:]).square().sum(-1).mean(-1))
+               +torch.exp(-(w[...,t,:]-rw[...,t,:]).square().sum(-1).mean(-1)/3.14**2)
+               +.5*torch.exp(-(p[...,0,:]-rp[...,0,:]).square().sum(-1)/.3**2)
+               +.5*torch.exp(-orientation_error(r[...,0,:,:],rr[...,0,:,:])/.4**2))
+        limits=(F.relu(self.lower-next_state[...,q])+F.relu(next_state[...,q]-self.upper)).sum(-1)
+        smooth=(action-state[...,last]).square().sum(-1)
+        return self.dt*(terms-2*limits-.1*smooth)
 
-    def termination(self, state, reference, soft):
-        tilt = (rotation(state[...,3:7])[...,2,2]-rotation(reference[...,3:7])[...,2,2]).abs()
-        height = (state[...,2]-reference[...,2]).abs()
-        if soft:
-            return 1-(1-torch.sigmoid((tilt-.8)/.05))*(1-torch.sigmoid((height-.25)/.02))
+    def termination(self,state,reference,soft):
+        tilt=(rotation(state[...,3:7])[...,2,2]-rotation(reference[...,3:7])[...,2,2]).abs()
+        height=(state[...,2]-reference[...,2]).abs()
+        if soft:return 1-(1-torch.sigmoid((tilt-.8)/.05))*(1-torch.sigmoid((height-.25)/.02))
         return (tilt>.8)|(height>.25)
 
 
-def fit_loss(model, states, actions, context):
-    state, loss = states[:,0], states.new_zeros(())
-    for t in range(actions.shape[1]):
-        state = model(state,actions[:,t],context)
-        loss = loss+model.error(state,states[:,t+1]).mean()
-    return loss/actions.shape[1]
+@contextmanager
+def frozen(*modules):
+    parameters=[p for module in modules for p in module.parameters()]
+    flags=[p.requires_grad for p in parameters]
+    for p in parameters:p.requires_grad_(False);p.grad=None
+    try:yield
+    finally:
+        for p,flag in zip(parameters,flags):p.requires_grad_(flag)
 
 
-def critic_input(state, future, context):
-    return torch.cat((state,future,context),-1)
+def lambda_returns(rewards,terminations,values,gamma=.99,lam=.95):
+    result=values[-1].detach();targets=[]
+    for t in reversed(range(len(rewards))):
+        result=rewards[t].detach()+gamma*(1-terminations[t].detach())*((1-lam)*values[t+1].detach()+lam*result)
+        targets.append(result)
+    return torch.stack(targets[::-1])
 
 
-def imagine(model,actor,critic,task,initial,history,references,futures,context,noise=True,bootstrap=True):
-    state, history = initial.detach(), history.detach()
-    survival = state.new_ones(state.shape[0]); total = state.new_zeros(state.shape[0])
-    rewards,terminals,values,inputs = [],[],[],[]
-    horizon = futures.shape[1]-1
-    # References do not depend on actions. Evaluate all reference kinematics in
-    # one batch, instead of launching the same Python FK tree at every step.
-    reference_kinematics=task.fk(references[:,1:])
-    for t in range(horizon):
-        inputs.append(critic_input(state,futures[:,t],context))
-        values.append(critic(inputs[-1]).squeeze(-1))
-        action = actor(history,futures[:,t])
-        nxt = model(state,action,context)
-        reward = task.reward(state,nxt,action,references[:,t+1],
-                             tuple(x[:,t] for x in reference_kinematics))
-        terminal = task.termination(nxt,references[:,t+1],soft=True)
-        total = total+.99**t*survival*reward
-        survival = survival*(1-terminal)
-        rewards.append(reward);terminals.append(terminal)
-        state = nxt
-        obs = proprio(state,task.nominal,context,noise)
-        history = torch.cat((history[:,1:],obs[:,None]),1)
-    final = critic(critic_input(state,futures[:,-1],context)).squeeze(-1)
-    values.append(final)
-    if bootstrap:
-        total = total+.99**horizon*survival*final
-    targets = lambda_returns(rewards,terminals,values)
-    return -total.mean(), torch.stack(inputs,1).detach(), targets.transpose(0,1).detach()
-
-
-def step(loss, optimizer, parameters, element_clip=False):
-    parameters = [p for p in parameters if p.requires_grad]
-    if not torch.isfinite(loss):
-        raise FloatingPointError("Nonfinite loss")
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    norm = nn.utils.clip_grad_norm_(parameters,1.,error_if_nonfinite=True)
+def step(loss,optimizer,parameters,element_clip=False):
+    parameters=[p for p in parameters if p.requires_grad]
+    if not torch.isfinite(loss):raise FloatingPointError('Nonfinite loss')
+    optimizer.zero_grad(set_to_none=True);loss.backward()
+    norm=nn.utils.clip_grad_norm_(parameters,1.,error_if_nonfinite=True)
     if element_clip:
         for p in parameters:
-            if p.grad is not None:
-                p.grad.clamp_(-.1,.1)
+            if p.grad is not None:p.grad.clamp_(-.1,.1)
     optimizer.step()
-    if any(not p.isfinite().all() for p in parameters):
-        raise FloatingPointError("Nonfinite parameters")
+    if any(not p.isfinite().all() for p in parameters):raise FloatingPointError('Nonfinite parameters')
     return float(norm)

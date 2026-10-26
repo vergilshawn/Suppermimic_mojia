@@ -6,6 +6,7 @@ are batched on the learner GPU. Clip end is explicit, distinct from a fall.
 import math
 import torch
 from .kernel import proprio
+from .dynamics import quat_multiply, rotation_increment
 
 
 class VectorCurriculum:
@@ -43,7 +44,7 @@ def reference_commands(env,device):
     for clip,n in enumerate(env.lengths):
         s=env.references[clip,torch.arange(n)].to(device)
         result.append(reference_velocity_command(s,torch.arange(n,device=device)))
-    from .references import ReferenceBank
+    
     # Command table uses the same offsets, indexed explicitly (not ReferenceBank's state API).
     return torch.cat(result),torch.tensor([sum(env.lengths[:c]) for c in range(len(env.lengths))],device=device)
 
@@ -52,18 +53,19 @@ class VectorCollector:
     def __init__(self,env,physics,actor,critics,tasks,config,device):
         from .interfaces import VelocityCommandSampler
         self.env,self.physics,self.actor,self.critics,self.tasks=env,physics,actor,critics,tasks
-        self.config=config;self.device=torch.device(device);self.n=config['simulator_environments']
+        self.config=config;self.device=torch.device(device);self.n=config['simulator_environments'];self.layout=env.layout
         self.references=env.references.to(device);self.lengths=torch.tensor(env.lengths,device=device)
         self.command_table,self.command_offsets=reference_commands(env,device)
         self.curriculum=VectorCurriculum(env.lengths,device,config.get('curriculum_ema',.1))
         self.interfaces=torch.zeros(self.n,dtype=torch.long,device=device)
         if config['interfaces']=='motion_velocity':self.interfaces[self.n//2:]=1
         self.commandsampler=VelocityCommandSampler(self.n,device,mode=config['velocity_mode'])
-        self.states=torch.zeros(self.n,100,device=device);self.contexts=torch.zeros(self.n,33,device=device)
-        self.history=torch.zeros(self.n,10,93,device=device)
+        self.states=torch.zeros(self.n,self.layout.state,device=device);self.contexts=torch.zeros(self.n,self.layout.context,device=device)
+        self.history=torch.zeros(self.n,self.layout.history,self.layout.observation,device=device)
         self.clips=torch.zeros(self.n,dtype=torch.long,device=device);self.frames=self.clips.clone()
         self.episode_ids=self.clips.clone();self.episode_rewards=torch.zeros(self.n,device=device)
         self.episode_steps=self.clips.clone();self.episode_serial=0
+        self.clean_worlds=torch.arange(self.n,device=device)<int(self.n*config.get("clean_collection_fraction",.5))
         self.reset(torch.arange(self.n,device=device))
     def ref_commands(self,clips=None,frames=None):
         clips=self.clips if clips is None else clips;frames=self.frames if frames is None else frames
@@ -74,59 +76,68 @@ class VectorCollector:
                             (self.lengths[clips]-1-frames).clamp_min(0).float()*.02,
                             source.float(),elapsed.float()/250.),-1)
     def future(self,clips,frames):
-        return self.references[clips[:,None],frames[:,None]+torch.arange(1,11,device=self.device)]
+        return self.references[clips[:,None],frames[:,None]+torch.arange(self.layout.future,device=self.device)]
     @torch.no_grad()
     def reset(self,ids):
         if ids.numel()==0:return
-        clips,frames=self.curriculum.sample(len(ids));context=torch.zeros(len(ids),33,device=self.device)
+        clips,frames=self.curriculum.sample(len(ids));context=torch.zeros(len(ids),self.layout.context,device=self.device)
         context[:,0]=1.
         if self.config.get('randomize',True):
             context[:,0]=.3+.9*torch.rand(len(ids),device=self.device)
-            context[:,1:30]=.02*torch.rand(len(ids),29,device=self.device)-.01
-            context[:,30:]= (2*torch.rand(len(ids),3,device=self.device)-1)*context.new_tensor([.025,.05,.05])
-        states=self.references[clips,frames].clone();states[:,71:]=0
+            context[:,1:1+self.layout.dof]=.02*torch.rand(len(ids),self.layout.dof,device=self.device)-.01
+            context[:,1+self.layout.dof:]= (2*torch.rand(len(ids),3,device=self.device)-1)*context.new_tensor([.025,.05,.05])
+        states=self.references[clips,frames].clone();states[:,13+2*self.layout.dof:]=0
+        if self.config.get('reset_state_noise',False):
+            uniform=lambda shape:2*torch.rand(shape,device=self.device)-1
+            states[:,:3]+=uniform((len(ids),3))*states.new_tensor([.05,.05,.01])
+            states[:,3:7]=quat_multiply(states[:,3:7],rotation_increment(uniform((len(ids),3))*states.new_tensor([.1,.1,.2])))
+            states[:,7:10]+=uniform((len(ids),3))*states.new_tensor([.5,.5,.2])
+            states[:,10:13]+=uniform((len(ids),3))*states.new_tensor([.52,.52,.78])
+            n=self.layout.dof
+            states[:,13:13+n]=(states[:,13:13+n]+.1*uniform((len(ids),n))).clamp(states.new_tensor(self.env.control['lower']),states.new_tensor(self.env.control['upper']))
         self.physics.reset(ids,states,context)
         self.states[ids]=states;self.contexts[ids]=context;self.clips[ids]=clips;self.frames[ids]=frames
-        obs=proprio(states,self.tasks.base_task.nominal,context,True)
-        self.history[ids]=obs[:,None].expand(-1,10,-1)
+        obs=proprio(states,self.tasks.base_task.nominal,context,self.config.get('observation_noise',True))
+        obs=torch.where(self.clean_worlds[ids,None],proprio(states,self.tasks.base_task.nominal,context,False),obs)
+        self.history[ids]=obs[:,None].expand(-1,self.layout.history,-1)
         self.commandsampler.reset(ids,self.ref_commands(clips,frames))
         self.episode_ids[ids]=torch.arange(self.episode_serial,self.episode_serial+len(ids),device=self.device)
         self.episode_serial+=len(ids);self.episode_rewards[ids]=0;self.episode_steps[ids]=0
     @torch.no_grad()
     def collect(self,steps,replay,policy_version):
-        rewards=[];terms=[];clips=[];frames=[];fall_count=end_count=0
+        rewards=[];terms=[];clips=[];frames=[];fall_count=end_count=saturation_count=0
         for _ in range(steps):
             future=self.future(self.clips,self.frames)
             command=self.commandsampler.commands.clone();source=self.commandsampler.reference_mask.clone();elapsed=self.commandsampler.elapsed.clone()
-            if self.config.get('update_normalizers',True):
-                self.actor.update_normalizers(self.history,future,self.states)
-                fm,_=self.critics.input_features(self.history,future,self.states,self.contexts,command,
-                           goal_metadata=self.goal_metadata(self.clips,self.frames,source,elapsed))
-                self.critics.motion[0].update(fm)
+            self.actor.update_normalizers(self.history,future,self.states)
+            self.critics.input_features(self.history,future,self.states,self.contexts,command,self.goal_metadata(self.clips,self.frames,source,elapsed),update=True)
             action=self.actor(self.history,future,self.states,self.interfaces,command)
-            action=action+.1*torch.randn_like(action)
+            action=(action+(~self.clean_worlds[:,None])*.1*torch.randn_like(action)).clamp(-20,20)
             nxt,diagnostics=self.physics.step(action)
+            saturation_count+=int(diagnostics.get("torque_saturated",torch.zeros(1)).sum())
+            self.dynamics.in_norm.update(self.dynamics.features(self.states,action,self.contexts))
+            self.dynamics.out_norm.update(self.dynamics.targets(self.states,nxt))
             if not torch.isfinite(nxt).all():raise FloatingPointError('Nonfinite physical transition')
-            if self.config.get('update_normalizers',True):
-                self.dynamics.in_norm.update(self.dynamics.features(self.states,action,self.contexts))
-                self.dynamics.out_norm.update(self.dynamics.targets(self.states,nxt))
             nextframe=self.frames+1;ref=self.references[self.clips,nextframe]
             terminal=self.tasks.termination(nxt,ref,False,self.interfaces).bool()
             clip_end=nextframe>=self.lengths[self.clips]-1
-            truncated=clip_end & ~terminal
+            timeout=self.episode_steps+1>=self.config.get("max_episode_steps",500)
+            truncated=(clip_end|timeout) & ~terminal
             reward=self.tasks.reward(self.states,nxt,action,ref,self.interfaces,command)
-            nextobs=proprio(nxt,self.tasks.base_task.nominal,self.contexts,True)
+            nextobs=proprio(nxt,self.tasks.base_task.nominal,self.contexts,self.config.get('observation_noise',True))
             self.commandsampler.step(self.ref_commands(self.clips,nextframe))
             nextcommand=self.commandsampler.commands.clone()
+            nextobs=torch.where(self.clean_worlds[:,None],proprio(nxt,self.tasks.base_task.nominal,self.contexts,False),nextobs)
             replay.add_batch(self.states,action,nxt,self.history[:,-1],nextobs,self.contexts,
                              self.clips,self.frames,self.interfaces,command,nextcommand,source,
                              terminal,truncated,clip_end,self.episode_ids,policy_version,
                              initial_histories=self.history,rewards=reward,command_elapsed=elapsed)
-            rewards.append(reward);terms.append(terminal|clip_end);clips.append(self.clips.clone());frames.append(self.frames.clone())
+            bootstrap=self.critics(torch.cat((self.history[:,1:],nextobs[:,None]),1),self.future(self.clips,nextframe),nxt,self.contexts,self.interfaces,nextcommand,goal_metadata=self.goal_metadata(self.clips,nextframe,source,elapsed+1))
+            rewards.append(reward+.99*(timeout & ~terminal & ~clip_end)*bootstrap);terms.append(terminal|clip_end|timeout);clips.append(self.clips.clone());frames.append(self.frames.clone())
             self.states=nxt;self.frames=nextframe;self.history=torch.cat((self.history[:,1:],nextobs[:,None]),1)
             self.episode_rewards+=reward;self.episode_steps+=1
             fall_count+=int(terminal.sum());end_count+=int(clip_end.sum())
-            self.reset(torch.where(terminal|clip_end)[0])
+            self.reset(torch.where(terminal|clip_end|timeout)[0])
         # Bootstrapped per-state return estimates over this collection segment.
         val=self.critics(self.history,self.future(self.clips,self.frames),self.states,self.contexts,
                          self.interfaces,self.commandsampler.commands,
@@ -136,7 +147,7 @@ class VectorCollector:
             self.curriculum.update(clips[t],frames[t],val,eligible=self.interfaces==0)
         return dict(physical_transitions=steps*self.n,vector_control_steps=steps,falls=fall_count,
                     clip_ends=end_count,mean_step_reward=float(torch.stack(rewards).mean()),
-                    torque_saturated_world_steps=int(diagnostics['torque_saturated'].sum()) if 'torque_saturated' in diagnostics else None)
+                    torque_saturated_world_steps=saturation_count)
     def state_dict(self):
         fields=('states','contexts','history','clips','frames','interfaces','episode_ids','episode_rewards','episode_steps')
         return dict(tensors={k:getattr(self,k).cpu() for k in fields},episode_serial=self.episode_serial,

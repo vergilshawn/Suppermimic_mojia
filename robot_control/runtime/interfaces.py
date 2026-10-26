@@ -4,7 +4,7 @@ Paper contracts: Appendix B/C/G encoder widths, shared 32-D tanh latent,
 downstream stop-gradient on decoder *weights*, per-interface critics, commands,
 and Table A.6 reward.  The following are explicit local choices, because the
 paper does not publish their exact formulas: motion features use relative root
-orientation and heading-frame relative root xyz (74/frame); velocity history is
+orientation and heading-frame relative root xyz (2N+16/frame); velocity history is
 the flattened ten observations; command scales are (2, 1.32, 3.35); and critics
 include controller history and reference/command-process metadata.  These choices
 are not author configuration claims. Relative root goals require a root pose in
@@ -17,14 +17,12 @@ from torch import nn
 from torch.func import functional_call
 from torch.nn import functional as F
 
-from robot_control.runtime.kernel import (
-    CONTEXT, DQ, LAST, N, OBS, Q, STATE, apply, mlp, rotation,
-)
-
+from .kernel import apply, mlp, rotation, spans
+from ..robot_layout import RobotLayout
 from .normalization import RunningNorm
 
 MOTION, VELOCITY = 0, 1
-GOAL_DIM, LATENT = 74, 32
+LATENT = 32
 GOAL_METADATA = 5
 COMMAND_LOW = (-1.5, -1.32, -3.35)
 COMMAND_HIGH = (2.0, 1.32, 3.35)
@@ -46,7 +44,7 @@ def heading_rotation(state):
 
 
 def motion_goal_features(state, future_states):
-    """74/frame; relative XY and heading errors are observable to the actor.
+    """2N+16/frame; relative XY and heading errors are observable to the actor.
 
     Relative displacement is expressed in the *current robot's* heading frame,
     recomputed at each imagined step and differentiated through current state.
@@ -54,6 +52,7 @@ def motion_goal_features(state, future_states):
     Translating/rotating robot and reference together in XY/yaw leaves the
     features unchanged, unlike absolute-reference orientation with no actor yaw.
     """
+    Q,DQ,LAST=spans(state)
     relative = future_states[..., :3] - state[..., None, :3]
     heading = heading_rotation(state).transpose(-1, -2)[..., None, :, :]
     reference_rotation = rotation(future_states[..., 3:7])
@@ -84,9 +83,11 @@ def _interfaces(interface, state):
 
 class MotionVelocityActor(nn.Module):
     def __init__(self, history=10, future=10, encoder=(2048, 1024, 512, 256),
-                 decoder=(2048, 1024, 512, 256), velocity_encoder=(256, 256)):
+                 decoder=(2048, 1024, 512, 256), velocity_encoder=(256, 256), layout=None):
         super().__init__()
         self.history, self.future = int(history), int(future)
+        self.layout=layout or RobotLayout(23,history,future)
+        GOAL_DIM,LATENT,OBS,N=self.layout.goal,self.layout.latent,self.layout.observation,self.layout.dof
         self.obs_norm=RunningNorm(OBS)
         self.goal_norm=RunningNorm(self.future*GOAL_DIM)
         self.motion_encoder = mlp(self.future * GOAL_DIM, LATENT, encoder)
@@ -119,7 +120,7 @@ class MotionVelocityActor(nn.Module):
     def forward(self, history, future_states, state, interface=None, command=None,
                 freeze_velocity_decoder=True):
         ids = _interfaces(interface, state)
-        actions = state.new_zeros(state.shape[0], N)
+        actions = state.new_zeros(state.shape[0], self.layout.dof)
         for ident in (MOTION, VELOCITY):
             mask = ids == ident
             if not bool(mask.any()):
@@ -145,17 +146,21 @@ class IndependentCritics(nn.Module):
     make the task's exogenous goal process observable to the value function and
     are explicit local corrections, not published author input-layout claims.
     """
-    def __init__(self, history=10, future=10, widths=(256, 128)):
+    def __init__(self, history=10, future=10, widths=(256, 128), layout=None):
         super().__init__()
         self.history, self.future = int(history), int(future)
+        self.layout=layout or RobotLayout(23,history,future)
+        STATE,CONTEXT,OBS,GOAL_DIM=self.layout.state,self.layout.context,self.layout.observation,self.layout.goal
         common = STATE + CONTEXT + self.history * OBS + GOAL_METADATA
-        self.motion = nn.Sequential(RunningNorm(common+self.future*GOAL_DIM), *mlp(common + self.future * GOAL_DIM, 1, widths))
+        self.motion_norm=RunningNorm(common+self.future*GOAL_DIM)
+        self.velocity_norm=RunningNorm(common+3)
+        self.motion = mlp(common + self.future * GOAL_DIM, 1, widths)
         self.velocity = mlp(common + 3, 1, widths)
         for network in (self.motion, self.velocity):
             nn.init.zeros_(network[-1].weight)
             nn.init.zeros_(network[-1].bias)
 
-    def input_features(self, history, future_states, state, context, command=None, goal_metadata=None):
+    def input_features(self, history, future_states, state, context, command=None, goal_metadata=None, update=False):
         if goal_metadata is None:
             goal_metadata = state.new_zeros(state.shape[0], GOAL_METADATA)
         if goal_metadata.shape != (state.shape[0], GOAL_METADATA):
@@ -163,7 +168,10 @@ class IndependentCritics(nn.Module):
         common = torch.cat((state, context, history.flatten(-2), goal_metadata), -1)
         motion = torch.cat((common, motion_goal_features(state, future_states).flatten(-2)), -1)
         velocity = None if command is None else torch.cat((common, normalize_command(command)), -1)
-        return motion, velocity
+        if update:
+            self.motion_norm.update(motion)
+            if velocity is not None:self.velocity_norm.update(velocity)
+        return self.motion_norm(motion), None if velocity is None else self.velocity_norm(velocity)
 
     def forward(self, history, future_states, state, context, interface=None, command=None, goal_metadata=None):
         ids = _interfaces(interface, state)
@@ -185,11 +193,11 @@ class IndependentCritics(nn.Module):
 def reference_velocity_command(states, frames=None, window=25):
     """Centered 25-frame means in each reference frame's heading coordinates.
 
-    `states` is one clip [T,100]. Returns [T,3], or frames.shape+[3]. At clip
+    `states` is one clip [T,13+3N]. Returns [T,3], or frames.shape+[3]. At clip
     boundaries the centered window is cropped, an explicit local convention.
     """
-    if states.ndim != 2 or states.shape[-1] != STATE or not len(states):
-        raise ValueError("Expected one nonempty [T,100] reference clip")
+    if states.ndim != 2 or (states.shape[-1]-13)%3 != 0 or not len(states):
+        raise ValueError("Expected one nonempty [T,13+3N] reference clip")
     if window <= 0 or window % 2 != 1:
         raise ValueError("Centered command window must have positive odd length")
     local_v = apply(heading_rotation(states).transpose(-1, -2), states[:, 7:10])
@@ -284,7 +292,7 @@ class VelocityCommandSampler:
 
 
 class InterfaceTasks(nn.Module):
-    def __init__(self, base_task, mode="rl", torso_index=15):
+    def __init__(self, base_task, mode="rl", torso_index=None):
         super().__init__()
         if mode not in ("rl", "distillation"):
             raise ValueError("Velocity mode must be rl or distillation")
@@ -292,6 +300,7 @@ class InterfaceTasks(nn.Module):
         self.mode = mode
         # FK excludes MuJoCo world body. 15 is named torso_link for this G1;
         # callers with another model must pass model.body('torso_link').id-1.
+        if torso_index is None:raise ValueError("A named torso FK index is required")
         self.torso_index = int(torso_index)
 
     @property
@@ -307,6 +316,7 @@ class InterfaceTasks(nn.Module):
         return self.base.fk
 
     def velocity_reward(self, state, next_state, action, command):
+        Q,DQ,LAST=spans(state)
         heading = heading_rotation(next_state).transpose(-1, -2)
         local_v = apply(heading, next_state[..., 7:10])
         world_w = apply(rotation(next_state[..., 3:7]), next_state[..., 10:13])
@@ -321,7 +331,7 @@ class InterfaceTasks(nn.Module):
                   F.relu(next_state[..., Q]-self.base.upper)).sum(-1)
         sideways = torso_z[..., 1].square()
         roll_pitch = torso_w[..., :2].square().sum(-1)
-        return .02*(track_v+track_yaw-.3*smooth-2*limits-4*sideways-.05*roll_pitch)
+        return self.base.dt*(track_v+track_yaw-.3*smooth-2*limits-4*sideways-.05*roll_pitch)
 
     def reward(self, state, next_state, action, reference, interface=None, command=None,
                reference_kinematics=None):

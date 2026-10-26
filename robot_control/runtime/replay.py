@@ -13,17 +13,20 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from ..robot_layout import RobotLayout
 
 
-class ReplayV3:
-    VERSION = 1
+class Replay:
+    VERSION = 2
     # State contains qpos/qvel and last executed action; histories contain the
     # actual noisy observations, not observations regenerated from those states.
-    FIELDS = {
-        "states": ((100,), np.float32),
-        "next_states": ((100,), np.float32),
-        "actions": ((29,), np.float32),
-        "contexts": ((33,), np.float32),
+    @staticmethod
+    def fields(layout):
+        return {
+        "states": ((layout.state,), np.float32),
+        "next_states": ((layout.state,), np.float32),
+        "actions": ((layout.dof,), np.float32),
+        "contexts": ((layout.context,), np.float32),
         "clips": ((), np.int32),
         "frames": ((), np.int32),
         "interfaces": ((), np.int16),
@@ -40,7 +43,9 @@ class ReplayV3:
         "rewards": ((), np.float32),
     }
 
-    def __init__(self, capacity=4_096_000, num_envs=4096, history=10, seed=0):
+    def __init__(self, capacity=4_096_000, num_envs=4096, history=10, seed=0, layout=None):
+        self.layout=layout or RobotLayout(23,history)
+        self.FIELDS=self.fields(self.layout)
         if int(capacity) < int(num_envs) or int(num_envs) < 1 or int(history) < 1:
             raise ValueError("capacity >= num_envs >= 1 and history >= 1 required")
         self.requested_capacity = int(capacity)
@@ -56,7 +61,7 @@ class ReplayV3:
             for name, (shape, dtype) in self.FIELDS.items()
         }
         self._observations = np.empty(
-            (self.num_envs, self.observation_slots, 93), dtype=np.float32)
+            (self.num_envs, self.observation_slots, self.layout.observation), dtype=np.float32)
         self._prefixes = {}
         self._interface_cache = {}
 
@@ -65,10 +70,11 @@ class ReplayV3:
 
     @classmethod
     def estimate_bytes(cls, capacity=4_096_000, num_envs=4096, history=10,
-                       custom_prefixes=0):
+                       custom_prefixes=0, layout=None):
+        layout=layout or RobotLayout(23,history)
         """Allocated array bytes; no GPU cache or full-history replication.
 
-        An explicitly supplied, nontrivial reset prefix costs (history-1)*93*4
+        An explicitly supplied, nontrivial reset prefix costs (history-1)*layout.observation*4
         extra bytes per retained episode.  The usual repeated reset observation
         needs no prefix allocation.  Interface sampling caches cost at most one
         int64 per retained transition per requested interface (disjoint indices).
@@ -77,16 +83,16 @@ class ReplayV3:
             raise ValueError("Invalid replay dimensions")
         actual = (int(capacity) // int(num_envs)) * int(num_envs)
         per_transition = sum(int(np.prod(shape)) * np.dtype(dtype).itemsize
-                             for shape, dtype in cls.FIELDS.values())
+                             for shape, dtype in cls.fields(layout).values())
         return {
             "capacity": actual,
             "transition_bytes": actual * per_transition,
-            "observation_bytes": (actual + num_envs*(history-1))*93*4,
-            "custom_prefix_bytes": int(custom_prefixes)*(history-1)*93*4,
+            "observation_bytes": (actual + num_envs*(history-1))*layout.observation*4,
+            "custom_prefix_bytes": int(custom_prefixes)*(history-1)*layout.observation*4,
             "maximum_interface_cache_bytes": actual*8,
             "total_array_bytes": actual*per_transition
-            + (actual + num_envs*(history-1))*93*4
-            + int(custom_prefixes)*(history-1)*93*4,
+            + (actual + num_envs*(history-1))*layout.observation*4
+            + int(custom_prefixes)*(history-1)*layout.observation*4,
         }
 
     def _array(self, name, value, shape, dtype):
@@ -140,8 +146,8 @@ class ReplayV3:
                  for name, value in supplied.items()}
         if (batch["command_elapsed"] < 0).any():
             raise ValueError("command_elapsed must be nonnegative")
-        obs = self._array("observations", observations, (93,), np.float32)
-        self._array("next_observations", next_observations, (93,), np.float32)
+        obs = self._array("observations", observations, (self.layout.observation,), np.float32)
+        self._array("next_observations", next_observations, (self.layout.observation,), np.float32)
         if np.logical_and(batch["terminated"], batch["truncated"]).any():
             raise ValueError("A transition cannot be both terminated and truncated")
         previous = (self.steps - 1) % self.slots
@@ -169,7 +175,7 @@ class ReplayV3:
         prefixes = {}
         if initial_histories is not None:
             hist = self._array("initial_histories", initial_histories,
-                               (self.history_length, 93), np.float32)
+                               (self.history_length, self.layout.observation), np.float32)
             if not np.array_equal(hist[reset, -1], obs[reset]):
                 raise ValueError("Initial history must end at the current observation")
             for env in np.flatnonzero(reset):
@@ -283,7 +289,7 @@ class ReplayV3:
         """
         filled = min(self.steps, self.slots)
         observed = min(self.steps, self.observation_slots)
-        return dict(version=self.VERSION, capacity=self.requested_capacity,
+        return dict(version=self.VERSION, layout=self.layout.to_dict(), capacity=self.requested_capacity,
                     num_envs=self.num_envs, history=self.history_length,
                     steps=self.steps, rng=deepcopy(self.rng.bit_generator.state),
                     arrays={name: torch.from_numpy(value[:, :filled].copy())
@@ -293,6 +299,7 @@ class ReplayV3:
                               for key, (start, value) in self._prefixes.items()})
 
     def load_state_dict(self, state):
+        if state.get("layout")!=self.layout.to_dict():raise ValueError("Replay robot layout mismatch")
         expected = (self.VERSION, self.requested_capacity, self.num_envs, self.history_length)
         got = (state["version"], state["capacity"], state["num_envs"], state["history"])
         if expected != got:
@@ -307,7 +314,7 @@ class ReplayV3:
                 raise ValueError(f"Invalid checkpoint array {name}")
             value[:, :filled] = restored
         observations = np.asarray(state["observations"])
-        if observations.shape != (self.num_envs, observed, 93) or observations.dtype != np.float32:
+        if observations.shape != (self.num_envs, observed, self.layout.observation) or observations.dtype != np.float32:
             raise ValueError("Invalid checkpoint observations")
         self._observations[:, :observed] = observations
         self._prefixes = {key: (start, np.asarray(value).copy())

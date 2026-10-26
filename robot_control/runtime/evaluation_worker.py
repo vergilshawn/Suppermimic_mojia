@@ -1,124 +1,77 @@
-"""CPU MuJoCo worlds with batched actor/FK; no CUDA inference or simulator changes."""
-import argparse
-from concurrent.futures import ThreadPoolExecutor
-import hashlib
-import json
-import os
+"""Independent GPU evaluation; no action/observation noise, full clips, immutable snapshots."""
+import argparse,json,os,time
 from pathlib import Path
-import time
 import numpy as np
-import mujoco
 import torch
-from robot_control.runtime.train import make_environment
-from robot_control.runtime.interfaces import MotionVelocityActor
-from robot_control.runtime.kernel import proprio
-from .evaluation_queue import atomic_json
+from .train import make_environment,make_networks,atomic_json,source_hashes
+from .physics import WarpPhysics
+from .kernel import proprio,spans
+from .regression import RegressionGuard
 
-
-def load(checkpoint):
-    cp=torch.load(checkpoint,map_location='cpu',weights_only=True)
-    c=cp['config'];env=make_environment(c)
-    if cp['schema']!=5 or cp['contract']!=env.contract:raise ValueError('Evaluation contract mismatch')
-    actor=MotionVelocityActor(10,10,c['encoder_widths'],c['decoder_widths'],c['velocity_encoder_widths'])
-    actor.load_state_dict(cp['actor']);actor.eval()
-    return cp,env,actor
-
-
-@torch.inference_mode()
-def evaluate(env,actor,clips=None,max_steps=None,physics_workers=4):
-    clips=list(range(len(env.lengths))) if clips is None else list(clips)
-    if not clips or len(set(clips))!=len(clips):raise ValueError('Nonempty unique clips required')
-    n=len(clips);ctx=torch.zeros(n,33);ctx[:,0]=1
-    states=[];data=[]
-    # reset applies the identical nominal constants before any world is stepped.
-    for clip in clips:
-        env.reset(clip,0,ctx[0]);d=mujoco.MjData(env.model)
-        d.qpos[:]=env.data.qpos;d.qvel[:]=env.data.qvel
-        mujoco.mj_forward(env.model,d);data.append(d)
-        states.append(env.state(np.zeros(29)))
-    state=torch.stack(states)
-    history=proprio(state,env.task.nominal,ctx,False)[:,None].expand(-1,10,-1).clone()
-    alive=np.ones(n,dtype=bool);failed=np.zeros(n,dtype=bool)
-    steps=np.zeros(n,dtype=int);returns=np.zeros(n);qerr=np.zeros(n);perr=np.zeros(n)
-    lengths=np.array([env.lengths[c]-1 for c in clips])
-    budget=int(lengths.max()) if max_steps is None else min(max_steps,int(lengths.max()))
-    def advance(item):
-        index,action=item;d=data[index];target=env.nominal+env.scale*action
-        for _ in range(4):
-            torque=env.kp*(target-d.qpos[7:])-env.kd*d.qvel[6:]
-            d.ctrl[:]=np.clip(torque,-env.effort,env.effort);mujoco.mj_step(env.model,d)
-        return np.concatenate((d.qpos[:7],d.qvel[:6],d.qpos[7:],d.qvel[6:],action))
-    with ThreadPoolExecutor(max_workers=physics_workers) as pool:
-        for f in range(budget):
-            ids=np.flatnonzero(alive)
-            if not len(ids):break
-            future=torch.stack([env.references[clips[i],torch.arange(f+1,f+11)] for i in ids])
-            action=actor(history[ids],future,state[ids])
-            nxt=torch.tensor(np.stack(list(pool.map(advance,zip(ids,action.numpy())))),dtype=torch.float32)
-            ref=torch.stack([env.references[clips[i],f+1] for i in ids])
-            returns[ids]+=env.task.reward(state[ids],nxt,action,ref).numpy()
-            qerr[ids]+=(nxt[:,13:42]-ref[:,13:42]).square().mean(-1).numpy()
-            perr[ids]+=(nxt[:,:3]-ref[:,:3]).square().sum(-1).numpy()
-            fail=env.task.termination(nxt,ref,False).numpy()
-            state[ids]=nxt
-            history[ids]=torch.cat((history[ids,1:],proprio(nxt,env.task.nominal,ctx[ids],False)[:,None]),1)
-            steps[ids]+=1;failed[ids]|=fail
-            alive[ids]=~fail & (steps[ids]<lengths[ids])
-    motions=[dict(clip=env.clip_names[c],steps=int(steps[i]),completed=bool(not failed[i] and steps[i]==lengths[i]),
-                  terminated=bool(failed[i]),budget_limited=bool(alive[i]),normalized_return=float(returns[i]/(.1*lengths[i])),
-                  joint_rmse_rad=float(np.sqrt(qerr[i]/max(1,steps[i]))),
-                  root_rms_distance_m=float(np.sqrt(perr[i]/max(1,steps[i])))) for i,c in enumerate(clips)]
-    return dict(motions=motions,completion_rate=sum(m['completed'] for m in motions)/n,
-                normalized_return=sum(m['normalized_return'] for m in motions)/n,
-                full_library=clips==list(range(len(env.lengths))) and max_steps is None,
-                device='cpu',physics='MuJoCo nominal; same clipped PD and reward as v3')
-
-
-def parent_alive(pid):
-    if pid is None:return True
-    try:os.kill(pid,0);return True
-    except ProcessLookupError:return False
-
+@torch.no_grad()
+def evaluate(env,actor,tasks,physics,device,max_steps=None):
+    refs=env.references.to(device);n=len(env.lengths);ids=torch.arange(n,device=device)
+    lengths=torch.tensor(env.lengths,device=device);state=refs[ids,0].clone();state[:,spans(state)[2]]=0
+    ctx=torch.zeros(n,env.layout.context,device=device);ctx[:,0]=1
+    physics.reset(ids,state,ctx);history=proprio(state,tasks.nominal,ctx)[:,None].repeat(1,env.layout.history,1)
+    active=torch.ones(n,device=device,dtype=torch.bool);fallen=~active;counts=torch.zeros(n,device=device,dtype=torch.long)
+    ret=torch.zeros(n,device=device);joint_error=ret.clone();root_error=ret.clone()
+    budget=int(lengths.max())-1 if max_steps is None else min(max_steps,int(lengths.max())-1)
+    for frame in range(budget):
+        future=refs[ids[:,None],frame+torch.arange(env.layout.future,device=device)[None]]
+        action=actor(history,future,state).clamp(-20,20);action[~active]=0
+        nxt,_=physics.step(action);ref=refs[ids,frame+1]
+        finite=torch.isfinite(nxt).all(-1);bad=tasks.termination(nxt,ref,False).bool()|~finite
+        if not finite.all():raise FloatingPointError('Nonfinite evaluation physics')
+        reward=tasks.reward(state,nxt,action,ref)
+        ret+=torch.where(active,reward,0);counts+=active
+        joint_error+=torch.where(active,(nxt[:,13:36]-ref[:,13:36]).square().mean(-1),0)
+        root_error+=torch.where(active,(nxt[:,:3]-ref[:,:3]).square().sum(-1),0)
+        fallen|=active&bad;active&=~bad & (frame+1<lengths-1)
+        state=nxt;history=torch.cat((history[:,1:],proprio(state,tasks.nominal,ctx)[:,None]),1)
+        if not active.any():break
+        # Inactive worlds cannot poison GPU contact capacity after falling indefinitely.
+        dead=ids[~active]
+        if len(dead):physics.reset(dead,refs[dead,0],ctx[dead])
+    motion=[]
+    for i,name in enumerate(env.clip_names):
+        steps=int(counts[i]);motion.append(dict(clip=name,steps=steps,fall=bool(fallen[i]),completed=bool(not fallen[i] and steps==env.lengths[i]-1),normalized_return=float(ret[i]/(.1*(env.lengths[i]-1))),joint_rmse_rad=float((joint_error[i]/max(steps,1)).sqrt()),root_rmse_m=float((root_error[i]/max(steps,1)).sqrt())))
+    return dict(motions=motion,normalized_return=float(np.mean([r['normalized_return'] for r in motion])),completion_rate=float(np.mean([r['completed'] for r in motion])),evaluation_is_full=max_steps is None,action_noise=0,observation_noise=False)
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True)
-    p.add_argument('--parent-pid',type=int);p.add_argument('--once',action='store_true')
-    p.add_argument('--device',default='cpu')
-    args=p.parse_args();torch.set_num_threads(2)
-    try:os.nice(10)
-    except OSError:pass
-    folder=args.run/'evaluation';folder.mkdir(parents=True,exist_ok=True)
-    import fcntl
-    lock=(folder/'worker.lock').open('w');fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-    backend=folder/'backend.json'
-    if backend.exists() and json.loads(backend.read_text())['device']!=args.device:
-        raise ValueError('Use a separate evaluation folder for a different physics backend')
-    atomic_json(dict(device=args.device),backend)
+    p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True);p.add_argument('--device',default='cuda:0');a=p.parse_args()
+    torch.set_num_threads(1);torch.set_float32_matmul_precision('high');queue=a.run/'evaluation';queue.mkdir(exist_ok=True)
+    env=actor=tasks=physics=None
+    guard=RegressionGuard()
+    for old in sorted(queue.glob("job_*.result.json")):
+        previous=json.loads(old.read_text())
+        if previous.get("status")=="complete":guard.observe(previous)
     while True:
-        jobs=[j for j in sorted(folder.glob('*.job.json')) if not j.with_suffix('.result.json').exists() and not j.with_suffix('.error.json').exists() and not j.with_suffix('.skipped.json').exists()]
-        if jobs:
-            # Coalesce stale pending jobs. No unbounded queue or concurrent models.
-            for old in jobs[:-1]:atomic_json({'reason':'superseded by newer pending checkpoint'},old.with_suffix('.skipped.json'))
-            job=jobs[-1];began=time.monotonic()
-            try:
-                meta=json.loads(job.read_text());cp_path=folder/meta['checkpoint']
-                if hashlib.sha256(cp_path.read_bytes()).hexdigest()!=meta['sha256']:raise ValueError('Checkpoint hash mismatch')
-                cp,env,actor=load(cp_path)
-                if args.device.startswith('cuda'):
-                    from .gpu_evaluation import evaluate as gpu_evaluate
-                    result=gpu_evaluate(env,actor,device=args.device)
-                else:result=evaluate(env,actor)
-                record=dict(iteration=meta['iteration'],checkpoint=meta,seconds=time.monotonic()-began,evaluation=result)
-                atomic_json(record,job.with_suffix('.result.json'))
-                best=folder/'best.json'
-                if result['full_library'] and (not best.exists() or result['normalized_return']>json.loads(best.read_text())['evaluation']['normalized_return']):atomic_json(record,best)
-                print(json.dumps({'iteration':meta['iteration'],'return':result['normalized_return'],'seconds':record['seconds']}),flush=True)
-                del cp,env,actor
-                if args.device.startswith('cuda'):torch.cuda.empty_cache()
-            except Exception as exc:
-                atomic_json(dict(error=repr(exc)),job.with_suffix('.error.json'));print(repr(exc),flush=True)
-        elif args.once or not parent_alive(args.parent_pid):break
-        else:time.sleep(5)
-
-
+        jobs=sorted(j for j in queue.glob('job_*.json') if '.result.' not in j.name)
+        pending=[j for j in jobs if not j.with_suffix('.result.json').exists()]
+        if not pending:
+            if (a.run/'evaluation_stop').exists():break
+            time.sleep(2);continue
+        job=pending[0];spec=json.loads(job.read_text());began=time.monotonic()
+        try:
+            cp=torch.load(spec['learner'],map_location='cpu',weights_only=True)
+            if cp['source_sha256']!=source_hashes():raise ValueError('Evaluator source mismatch')
+            if env is None:
+                env=make_environment(cp['config']);actor,_,_,tasks=make_networks(env,cp['config'],a.device)
+                physics=WarpPhysics(env,len(env.lengths),device=a.device)
+            if cp['contract']!=env.contract:raise ValueError('Evaluation contract mismatch')
+            actor.load_state_dict(cp['actor']);actor.eval()
+            result=evaluate(env,actor,tasks,physics,a.device)
+            result.update(iteration=cp['iteration']+1,seconds=time.monotonic()-began,full_checkpoint=spec['full_checkpoint'],learner=spec['learner'],status='complete')
+            improved,stop=guard.observe(result)
+            if improved:
+                for key,name in (('full_checkpoint','best.pt'),('learner','best_learner.pt')):
+                    target=a.run/(name+'.tmp');target.unlink(missing_ok=True);os.link(spec[key],target);os.replace(target,a.run/name)
+                atomic_json(dict(result,full_checkpoint=str((a.run/'best.pt').resolve()),learner=str((a.run/'best_learner.pt').resolve())),a.run/'best_evaluation.json')
+            result['regression_bad_count']=guard.bad_count;result['regression_stop']=stop
+            atomic_json(result,job.with_suffix('.result.json'))
+            # Best survives via hard links; discard processed queue payloads, retain metadata.
+            Path(spec['full_checkpoint']).unlink();Path(spec['learner']).unlink()
+        except Exception as e:
+            atomic_json(dict(status='error',error=repr(e),iteration=spec['iteration']),job.with_suffix('.result.json'));raise
 if __name__=='__main__':main()

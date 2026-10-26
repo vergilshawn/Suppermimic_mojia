@@ -1,11 +1,11 @@
 {
-  "robot": "g1",
+  "robot": "mojia",
   "weights": [
     {
-      "path": "checkpoints/g1/best.pt",
-      "sha256": "a09b5c1eb5e17af8816679b87883b4d2d69fa1012a6e2e67f70f613fb0e06f96",
-      "bytes": 37332113,
-      "iteration": 30000
+      "path": "checkpoints/mojia/learner.pt",
+      "sha256": "3a736068da56f3f69e506d684b8c47cbf88e16bfa0e7dcebadb0c575b5527db6",
+      "bytes": 72555854,
+      "iteration": 812
     }
   ],
   "distribution": "Local file; attach separately to a GitHub Release"

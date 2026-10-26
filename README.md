@@ -1,6 +1,6 @@
-# Robot Motion Control — G1
+# Robot Motion Control — MOJIA
 
-Model-based motion tracking with PyTorch and MuJoCo Warp. This branch targets **Unitree G1, 29 DOF**. Use `git switch g1` or `git switch mojia` to change robot implementations. Checkpoints are not interchangeable.
+Model-based motion tracking with PyTorch and MuJoCo Warp. This branch targets **Mojia v3.8, 23 DOF**. Use `git switch g1` or `git switch mojia` to change robot implementations. Checkpoints are not interchangeable.
 
 ## Setup
 
@@ -13,19 +13,19 @@ Python 3.11 and an existing CUDA-compatible PyTorch installation are required. F
 
 ## Train
 
-Prepared references belong in `data/g1/`; see [data preparation](docs/DATA.md). Check the recipe before launch:
+Prepared references belong in `data/mojia/`; see [data preparation](docs/DATA.md). Check the recipe before launch:
 
 ```bash
 python train.py --config configs/train.json --preflight
-python train.py --config configs/train.json --out runs/g1_new --device cuda:0 --seed 42
+python train.py --config configs/train.json --out runs/mojia_new --device cuda:0 --seed 42
 ```
 
-Training is currently stopped. The retained G1 model is the best policy-only snapshot at iteration 30000.
+Training is currently stopped. The stopped Mojia run reached 812 iterations of its 50000-iteration limit. Resume only from its full checkpoint, not the learner weights.
 
 ## Evaluate
 
 ```bash
-python evaluate.py --checkpoint checkpoints/g1/best.pt --device cuda:0 --out runs/g1_evaluation.json
+python evaluate.py --checkpoint checkpoints/mojia/learner.pt --device cuda:0 --out runs/mojia_evaluation.json
 ```
 
 `--device cpu --max-steps 100` provides a bounded functionality check; it is not a full-clip success test.

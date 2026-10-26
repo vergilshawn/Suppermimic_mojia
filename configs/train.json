@@ -1,7 +1,8 @@
 {
-  "profile": "g1_motion",
-  "schema": 5,
-  "assets": "data/g1",
+  "profile": "mojia_motion",
+  "schema": "mojia_ndof_v6",
+  "assets": "data/mojia",
+  "dof": 23,
   "interfaces": "motion",
   "velocity_mode": "rl",
   "history": 10,
@@ -47,9 +48,9 @@
   "update_to_data_ratio": 0.4,
   "utd_unit": "outer_updates_per_vector_control_step",
   "learning_rate": 0.0002,
-  "lr_decay_iterations": 250000,
+  "lr_decay_iterations": 50000,
   "lr_minimum_fraction": 0.03,
-  "iterations": 100000,
+  "iterations": 50000,
   "randomize": true,
   "curriculum_ema": 0.1,
   "threads": 2,
@@ -59,12 +60,15 @@
   "checkpoint_interval": 1000,
   "filtering_deferred": true,
   "paper_equivalent": false,
-  "deviations": [
-    "Local G1 physical asset and 74/frame relative goal retained; not exact upstream encoding",
-    "CPU replay retained until GPU memory profiling",
-    "Unfiltered 40 LAFAN clips; no full BONES claim",
-    "70 local state increments and running normalization adapted to local body-angular-velocity convention"
-  ],
+  "smoke_test": false,
+  "actuator_delay_steps": 0,
+  "observation_noise": true,
+  "max_episode_steps": 500,
+  "clean_collection_fraction": 0.5,
+  "reset_state_noise": true,
   "warmup_steps": 64,
-  "wm_only_iterations": 500
+  "wm_only_iterations": 500,
+  "regression_patience": 3,
+  "regression_return_drop": 0.15,
+  "regression_completion_drop": 0.2
 }

@@ -1,0 +1,1105 @@
+{
+  "schema": 1,
+  "robot": "mojia_v3_8",
+  "readiness": "offline contract prepared; training/runtime/hardware migration pending",
+  "candidate_asset": {
+    "path": "robots/mojia/urdf/robot.urdf",
+    "sha256": "90b82954d54d038187c5620d711ade4380662e5420e8d8551244941ae4f3c9fd",
+    "joints": {
+      "lumbar_yaw_joint": {
+        "type": "revolute",
+        "parent": "base_link",
+        "child": "lumbar_yaw",
+        "axis": "0 0 1",
+        "origin": {
+          "xyz": "0.00122499999990377 0 0.0787",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.0,
+        "upper": 1.0,
+        "effort": 150.0,
+        "velocity": 12.0
+      },
+      "left_shoulder_pitch_joint": {
+        "type": "revolute",
+        "parent": "lumbar_yaw",
+        "child": "left_shoulder_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 0.12375 0.275",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "left_shoulder_roll_joint": {
+        "type": "revolute",
+        "parent": "left_shoulder_pitch",
+        "child": "left_shoulder_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.02 0.056 0",
+          "rpy": "0 0 0"
+        },
+        "lower": 0.0,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "left_shoulder_yaw_joint": {
+        "type": "revolute",
+        "parent": "left_shoulder_roll",
+        "child": "left_shoulder_yaw",
+        "axis": "0 0 1",
+        "origin": {
+          "xyz": "-0.0200000000000006 0 -0.05",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "left_elbow_pitch_joint": {
+        "type": "revolute",
+        "parent": "left_shoulder_yaw",
+        "child": "left_elbow_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "9.0641E-05 0.02 -0.18875",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.7,
+        "upper": 1.57,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "left_elbow_yaw_joint": {
+        "type": "revolute",
+        "parent": "left_elbow_pitch",
+        "child": "left_elbow_yaw",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.0499088454734542 -0.0202263971953495 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "right_shoulder_pitch_joint": {
+        "type": "revolute",
+        "parent": "lumbar_yaw",
+        "child": "right_shoulder_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 -0.12375 0.275",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "right_shoulder_roll_joint": {
+        "type": "revolute",
+        "parent": "right_shoulder_pitch",
+        "child": "right_shoulder_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.0200000000021047 -0.0562500000004143 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 0.0,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "right_shoulder_yaw_joint": {
+        "type": "revolute",
+        "parent": "right_shoulder_roll",
+        "child": "right_shoulder_yaw",
+        "axis": "0 0 1",
+        "origin": {
+          "xyz": "-0.0200000000000296 0 -0.0499999999999883",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "right_elbow_pitch_joint": {
+        "type": "revolute",
+        "parent": "right_shoulder_yaw",
+        "child": "right_elbow_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "9.06410366918463E-05 -0.0199997946035225 -0.188750000000161",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.7,
+        "upper": 1.57,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "right_elbow_yaw_joint": {
+        "type": "revolute",
+        "parent": "right_elbow_pitch",
+        "child": "right_elbow_yaw",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.0499088454735173 0.0202263971952572 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -3.14,
+        "upper": 3.14,
+        "effort": 27.0,
+        "velocity": 8.0
+      },
+      "left_hip_pitch_joint": {
+        "type": "revolute",
+        "parent": "base_link",
+        "child": "left_hip_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0.001225 0.0635 -0.0568",
+          "rpy": "0 0 0"
+        },
+        "lower": -2.1,
+        "upper": 1.0,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "left_hip_roll_joint": {
+        "type": "revolute",
+        "parent": "left_hip_pitch",
+        "child": "left_hip_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.0214999999999999 0.0780000000000027 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -0.6,
+        "upper": 1.0,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "left_hip_yaw_joint": {
+        "type": "revolute",
+        "parent": "left_hip_roll",
+        "child": "left_hip_yaw",
+        "axis": "0 0 1",
+        "origin": {
+          "xyz": "-0.0294999999997593 0 -0.0899999999999973",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.1,
+        "upper": 1.0,
+        "effort": 50.0,
+        "velocity": 24.0
+      },
+      "left_knee_pitch_joint": {
+        "type": "revolute",
+        "parent": "left_hip_yaw",
+        "child": "left_knee_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 0 -0.26899999999994",
+          "rpy": "0 0 0"
+        },
+        "lower": 0.0,
+        "upper": 1.8,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "left_ankle_pitch_joint": {
+        "type": "revolute",
+        "parent": "left_knee_pitch",
+        "child": "left_ankle_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 0 -0.428",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.5,
+        "upper": 1.5,
+        "effort": 34.0,
+        "velocity": 8.0
+      },
+      "left_ankle_roll_joint": {
+        "type": "revolute",
+        "parent": "left_ankle_pitch",
+        "child": "left_ankle_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0 0 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -0.5,
+        "upper": 0.5,
+        "effort": 34.0,
+        "velocity": 8.0
+      },
+      "right_hip_pitch_joint": {
+        "type": "revolute",
+        "parent": "base_link",
+        "child": "right_hip_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0.0012249999997929 -0.0634999999999965 -0.0567999999999975",
+          "rpy": "0 0 0"
+        },
+        "lower": -2.1,
+        "upper": 1.0,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "right_hip_roll_joint": {
+        "type": "revolute",
+        "parent": "right_hip_pitch",
+        "child": "right_hip_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0.0215000000000029 -0.0779999999999966 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.0,
+        "upper": 0.3,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "right_hip_yaw_joint": {
+        "type": "revolute",
+        "parent": "right_hip_roll",
+        "child": "right_hip_yaw",
+        "axis": "0 0 1",
+        "origin": {
+          "xyz": "-0.0295000000000009 0 -0.0900000000000027",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.0,
+        "upper": 1.0,
+        "effort": 50.0,
+        "velocity": 24.0
+      },
+      "right_knee_pitch_joint": {
+        "type": "revolute",
+        "parent": "right_hip_yaw",
+        "child": "right_knee_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 0 -0.269",
+          "rpy": "0 0 0"
+        },
+        "lower": 0.0,
+        "upper": 1.8,
+        "effort": 150.0,
+        "velocity": 8.0
+      },
+      "right_ankle_pitch_joint": {
+        "type": "revolute",
+        "parent": "right_knee_pitch",
+        "child": "right_ankle_pitch",
+        "axis": "0 1 0",
+        "origin": {
+          "xyz": "0 0 -0.428",
+          "rpy": "0 0 0"
+        },
+        "lower": -1.5,
+        "upper": 1.5,
+        "effort": 34.0,
+        "velocity": 8.0
+      },
+      "right_ankle_roll_joint": {
+        "type": "revolute",
+        "parent": "right_ankle_pitch",
+        "child": "right_ankle_roll",
+        "axis": "1 0 0",
+        "origin": {
+          "xyz": "0 0 0",
+          "rpy": "0 0 0"
+        },
+        "lower": -0.5,
+        "upper": 0.5,
+        "effort": 34.0,
+        "velocity": 8.0
+      }
+    },
+    "link_count": 24,
+    "total_mass_kg": 37.58348201494467,
+    "inertias": [
+      {
+        "link": "base_link",
+        "mass": 6.2548,
+        "positive_definite": true
+      },
+      {
+        "link": "lumbar_yaw",
+        "mass": 10.208914,
+        "positive_definite": true
+      },
+      {
+        "link": "left_shoulder_pitch",
+        "mass": 0.45793174,
+        "positive_definite": true
+      },
+      {
+        "link": "left_shoulder_roll",
+        "mass": 0.0758318995151421,
+        "positive_definite": true
+      },
+      {
+        "link": "left_shoulder_yaw",
+        "mass": 1.12367547,
+        "positive_definite": true
+      },
+      {
+        "link": "left_elbow_pitch",
+        "mass": 0.0758318995004663,
+        "positive_definite": true
+      },
+      {
+        "link": "left_elbow_yaw",
+        "mass": 0.8163,
+        "positive_definite": true
+      },
+      {
+        "link": "right_shoulder_pitch",
+        "mass": 0.45793174,
+        "positive_definite": true
+      },
+      {
+        "link": "right_shoulder_roll",
+        "mass": 0.0758318979713105,
+        "positive_definite": true
+      },
+      {
+        "link": "right_shoulder_yaw",
+        "mass": 1.12367547,
+        "positive_definite": true
+      },
+      {
+        "link": "right_elbow_pitch",
+        "mass": 0.075831897957758,
+        "positive_definite": true
+      },
+      {
+        "link": "right_elbow_yaw",
+        "mass": 0.8163,
+        "positive_definite": true
+      },
+      {
+        "link": "left_hip_pitch",
+        "mass": 1.6527,
+        "positive_definite": true
+      },
+      {
+        "link": "left_hip_roll",
+        "mass": 0.2173,
+        "positive_definite": true
+      },
+      {
+        "link": "left_hip_yaw",
+        "mass": 3.125,
+        "positive_definite": true
+      },
+      {
+        "link": "left_knee_pitch",
+        "mass": 2.0826,
+        "positive_definite": true
+      },
+      {
+        "link": "left_ankle_pitch",
+        "mass": 0.077716,
+        "positive_definite": true
+      },
+      {
+        "link": "left_ankle_roll",
+        "mass": 0.85481,
+        "positive_definite": true
+      },
+      {
+        "link": "right_hip_pitch",
+        "mass": 1.6527,
+        "positive_definite": true
+      },
+      {
+        "link": "right_hip_roll",
+        "mass": 0.2173,
+        "positive_definite": true
+      },
+      {
+        "link": "right_hip_yaw",
+        "mass": 3.1254,
+        "positive_definite": true
+      },
+      {
+        "link": "right_knee_pitch",
+        "mass": 2.0826,
+        "positive_definite": true
+      },
+      {
+        "link": "right_ankle_pitch",
+        "mass": 0.0777,
+        "positive_definite": true
+      },
+      {
+        "link": "right_ankle_roll",
+        "mass": 0.8548,
+        "positive_definite": true
+      }
+    ],
+    "meshes": [
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/base_link.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/base_link.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/lumbar_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_shoulder_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_shoulder_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_shoulder_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_elbow_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_elbow_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_elbow_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/support_rod_20cm_convex.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_shoulder_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_shoulder_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_shoulder_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_elbow_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_elbow_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_elbow_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/support_rod_20cm_convex.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_hip_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_hip_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_hip_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_knee_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_ankle_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_ankle_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_ankle_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/left_ankle_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_hip_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_hip_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_hip_yaw.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_knee_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_ankle_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_ankle_pitch.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_ankle_roll.STL",
+        "present": true
+      },
+      {
+        "name": "assets/robots/mojia_v3_8/meshes/right_ankle_roll.STL",
+        "present": true
+      }
+    ]
+  },
+  "saved_gain_source": {
+    "path": "assets/checkpoints/mimic_teacher/params/env.yaml",
+    "sha256": "5b0fe696f9d631ea8d26f9baed0e38aabfe19fe90de67a45472dedc6a5e392f1"
+  },
+  "joint_order_source": {
+    "path": "assets/motions/getup/mujoco_contract.json",
+    "sha256": "7e628ab057a5eb0b1ca85c71b1c58cb4272c5bd8321fc79c55f3d45a5eeae3e3"
+  },
+  "joints": [
+    {
+      "name": "left_hip_pitch_joint",
+      "controller_index": 0,
+      "actuator_group": "legs",
+      "lower_rad": -2.1,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": -0.35,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "lumbar_yaw_joint",
+      "controller_index": 1,
+      "actuator_group": "torso",
+      "lower_rad": -1.0,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 12.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_hip_pitch_joint",
+      "controller_index": 2,
+      "actuator_group": "legs",
+      "lower_rad": -2.1,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": -0.35,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_hip_roll_joint",
+      "controller_index": 3,
+      "actuator_group": "legs",
+      "lower_rad": -0.6,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_shoulder_pitch_joint",
+      "controller_index": 4,
+      "actuator_group": "shoulders",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.18,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_shoulder_pitch_joint",
+      "controller_index": 5,
+      "actuator_group": "shoulders",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.18,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_hip_roll_joint",
+      "controller_index": 6,
+      "actuator_group": "legs",
+      "lower_rad": -1.0,
+      "upper_rad": 0.3,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_hip_yaw_joint",
+      "controller_index": 7,
+      "actuator_group": "hip_yaw",
+      "lower_rad": -1.1,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 50.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 24.0,
+      "saved_sim_velocity_rad_s": 24.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_shoulder_roll_joint",
+      "controller_index": 8,
+      "actuator_group": "shoulders",
+      "lower_rad": 0.0,
+      "upper_rad": 3.14,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.06,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_shoulder_roll_joint",
+      "controller_index": 9,
+      "actuator_group": "shoulders",
+      "lower_rad": -3.14,
+      "upper_rad": 0.0,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": -0.06,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_hip_yaw_joint",
+      "controller_index": 10,
+      "actuator_group": "hip_yaw",
+      "lower_rad": -1.0,
+      "upper_rad": 1.0,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 50.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 24.0,
+      "saved_sim_velocity_rad_s": 24.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_knee_pitch_joint",
+      "controller_index": 11,
+      "actuator_group": "legs",
+      "lower_rad": 0.0,
+      "upper_rad": 1.8,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": 0.41,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_shoulder_yaw_joint",
+      "controller_index": 12,
+      "actuator_group": "shoulders",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_shoulder_yaw_joint",
+      "controller_index": 13,
+      "actuator_group": "shoulders",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 40.0,
+      "kd": 2.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_knee_pitch_joint",
+      "controller_index": 14,
+      "actuator_group": "legs",
+      "lower_rad": 0.0,
+      "upper_rad": 1.8,
+      "kp": 120.0,
+      "kd": 4.0,
+      "armature": 0.01,
+      "torque_limit_sim_nm": 150.0,
+      "nominal_rad": 0.41,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 12.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_ankle_pitch_joint",
+      "controller_index": 15,
+      "actuator_group": "feet",
+      "lower_rad": -1.5,
+      "upper_rad": 1.5,
+      "kp": 35.0,
+      "kd": 1.5,
+      "armature": 0.25714184645044913,
+      "torque_limit_sim_nm": 34.0,
+      "nominal_rad": -0.16,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_elbow_pitch_joint",
+      "controller_index": 16,
+      "actuator_group": "arms",
+      "lower_rad": -1.7,
+      "upper_rad": 1.57,
+      "kp": 30.0,
+      "kd": 1.5,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.78,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_elbow_pitch_joint",
+      "controller_index": 17,
+      "actuator_group": "arms",
+      "lower_rad": -1.7,
+      "upper_rad": 1.57,
+      "kp": 30.0,
+      "kd": 1.5,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.78,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_ankle_pitch_joint",
+      "controller_index": 18,
+      "actuator_group": "feet",
+      "lower_rad": -1.5,
+      "upper_rad": 1.5,
+      "kp": 35.0,
+      "kd": 1.5,
+      "armature": 0.25714184645044913,
+      "torque_limit_sim_nm": 34.0,
+      "nominal_rad": -0.16,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_ankle_roll_joint",
+      "controller_index": 19,
+      "actuator_group": "feet",
+      "lower_rad": -0.5,
+      "upper_rad": 0.5,
+      "kp": 35.0,
+      "kd": 1.5,
+      "armature": 0.08575669273139107,
+      "torque_limit_sim_nm": 34.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "left_elbow_yaw_joint",
+      "controller_index": 20,
+      "actuator_group": "elbow_yaw",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 20.0,
+      "kd": 1.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_elbow_yaw_joint",
+      "controller_index": 21,
+      "actuator_group": "elbow_yaw",
+      "lower_rad": -3.14,
+      "upper_rad": 3.14,
+      "kp": 20.0,
+      "kd": 1.0,
+      "armature": 0.032,
+      "torque_limit_sim_nm": 27.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "saved_yaml_patterns",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    },
+    {
+      "name": "right_ankle_roll_joint",
+      "controller_index": 22,
+      "actuator_group": "feet",
+      "lower_rad": -0.5,
+      "upper_rad": 0.5,
+      "kp": 35.0,
+      "kd": 1.5,
+      "armature": 0.08575669273139107,
+      "torque_limit_sim_nm": 34.0,
+      "nominal_rad": 0.0,
+      "nominal_source": "prepared_contract_default_no_yaml_pattern",
+      "urdf_velocity_rad_s": 8.0,
+      "saved_sim_velocity_rad_s": 8.0,
+      "saved_delay_min_physics_steps": 0,
+      "saved_delay_max_physics_steps": 2,
+      "hardware_motor_id": null,
+      "hardware_sign": null,
+      "hardware_zero_rad": null,
+      "hardware_limits_confirmed": false
+    }
+  ],
+  "action_dim": 23,
+  "control_dt_s": 0.02,
+  "physics_dt_s": 0.005,
+  "nominal_action_scale_rad": 0.25,
+  "hardware_validated": false,
+  "velocity_conflicts": [
+    "left_hip_pitch_joint",
+    "right_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "right_hip_roll_joint",
+    "left_knee_pitch_joint",
+    "right_knee_pitch_joint"
+  ],
+  "gaps": [
+    "Real mechanical limits / motor IDs / signs / encoder zero not confirmed",
+    "Actuator delay queues and torque-speed/thermal states absent from current G1 runtime",
+    "Retargeter rods radius .01 vs target asset .015; MJCF/URDF must be reconciled",
+    "No accepted basic tracking dataset for Mojia yet",
+    "No hardware communication and root pose estimator adapter found",
+    "G1 29-DOF weights and replay cannot be loaded as Mojia 23-DOF dynamics"
+  ]
+}
