@@ -98,9 +98,12 @@ def prepare(source,out,assets):
     print(json.dumps(dict(output=str(out),clips=len(clips),source_duration_h=manifest["source_duration_h"])))
 
 
-if __name__=="__main__":
+def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--source",type=Path,required=True)
     p.add_argument("--out",type=Path,default=ROOT/"data/g1")
-    p.add_argument("--assets",type=Path,default=ROOT/"robots/g1")
-    a=p.parse_args();prepare(a.source,a.out,a.assets)
+    p.add_argument("--assets",type=Path,default=ROOT/"assets/robots/g1")
+    a=p.parse_args(argv);prepare(a.source,a.out,a.assets)
+
+if __name__ == "__main__":
+    main()

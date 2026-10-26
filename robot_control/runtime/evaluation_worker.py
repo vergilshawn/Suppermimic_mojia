@@ -80,11 +80,11 @@ def parent_alive(pid):
     except ProcessLookupError:return False
 
 
-def main():
+def main(argv=None):
     p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True)
     p.add_argument('--parent-pid',type=int);p.add_argument('--once',action='store_true')
     p.add_argument('--device',default='cpu')
-    args=p.parse_args();torch.set_num_threads(2)
+    args=p.parse_args(argv);torch.set_num_threads(2)
     try:os.nice(10)
     except OSError:pass
     folder=args.run/'evaluation';folder.mkdir(parents=True,exist_ok=True)

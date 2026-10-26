@@ -4,5 +4,15 @@
   "mojia_gpu_resume_checked_from_iteration": 812,
   "mojia_gpu_resume_completed_iteration": 813,
   "original_mojia_checkpoint_preserved_at": 812,
-  "formal_training_restarted": false
+  "formal_training_restarted": false,
+  "command_layout_checks": {
+    "date": "2026-10-26",
+    "unit_tests": 5,
+    "cli_help_routes": 14,
+    "dataset_contract": "passed",
+    "best_checkpoint": "unchanged; successfully loaded",
+    "cpu_evaluation": "40 clips, 2 steps per clip; functionality only",
+    "render": "3 frames at 320x180, dance1_subject2; functionality only",
+    "formal_training_started": false
+  }
 }

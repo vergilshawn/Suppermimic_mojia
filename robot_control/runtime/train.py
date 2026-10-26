@@ -281,14 +281,14 @@ def run(c,out,device,seed=42,resume=None,max_iterations=None):
     return report
 
 
-def main():
+def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config',type=Path,default=ROOT/'configs/motion.json')
     p.add_argument('--out',type=Path);p.add_argument('--device',default='cuda:0');p.add_argument('--seed',type=int,default=42)
     p.add_argument('--eval-device',default='cuda:0')
     p.add_argument('--resume',type=Path);p.add_argument('--preflight',action='store_true')
     p.add_argument('--verification-iterations',type=int,help='Explicit bounded integration verification, not paper training')
-    args=p.parse_args();c=json.loads(args.config.read_text());n=validate_config(c)
+    args=p.parse_args(argv);c=json.loads(args.config.read_text());n=validate_config(c)
     if args.preflight:
         print(json.dumps(dict(config=c,vector_steps_per_iteration=n,physical_transitions_per_iteration=n*c['simulator_environments'],
                               replay_memory_estimate=ReplayV3.estimate_bytes(c['replay_transitions'],c['simulator_environments']),
