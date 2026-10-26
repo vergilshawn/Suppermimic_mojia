@@ -15,3 +15,6 @@ runs/
 *.log
 MUJOCO_LOG.TXT
 third_party/
+.aws/
+.codex/
+.agents/
