@@ -28,7 +28,12 @@ def main(argv=None):
     s = sub.add_parser('serve', help='Serve existing comparison files locally.')
     s.add_argument('--directory', type=Path, default=Path('web'))
     s.add_argument('--port', type=int, default=8000)
+    studio = sub.add_parser('studio', help='Robot/model/motion browser with queued evaluation and playback.')
+    studio.add_argument('--port', type=int, default=8765)
     a = p.parse_args(argv)
+    if a.mode == 'studio':
+        from robot_control.studio import serve
+        return serve(a.port)
     if a.mode == 'serve':
         from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
         from functools import partial
@@ -83,6 +88,11 @@ def render(a):
         tasks = env.task
         n, h, future_count, context_count = 29, 10, 10, 33
         qids = np.arange(7, 36)
+        physics = None
+        if a.device.startswith('cuda'):
+            from robot_control.runtime.physics import WarpPhysics
+            actor = actor.to(a.device); tasks = tasks.to(a.device)
+            physics = WarpPhysics(env, 1, device=a.device)
     unknown = set(a.motion) - set(env.clip_names)
     if unknown: raise ValueError(f'Unknown clips: {sorted(unknown)}')
     a.out.mkdir(parents=True, exist_ok=True)
@@ -112,9 +122,9 @@ def render(a):
     results = []
     with mujoco.Renderer(model, height=a.height, width=a.width) as renderer, torch.inference_mode():
         for name in a.motion:
-            clip = env.clip_names.index(name); ctx = torch.zeros(1, context_count, device=a.device if mojia else 'cpu'); ctx[:, 0] = 1
-            state = env.references[clip, 0][None].clone().to(a.device if mojia else 'cpu'); state[:, 13+2*n:] = 0
-            if mojia: physics.reset(torch.tensor([0],device=state.device), state, ctx)
+            clip = env.clip_names.index(name); ctx = torch.zeros(1, context_count, device=a.device); ctx[:, 0] = 1
+            state = env.references[clip, 0][None].clone().to(a.device); state[:, 13+2*n:] = 0
+            if physics is not None: physics.reset(torch.tensor([0],device=state.device), state, ctx)
             else: env.reset(clip, 0, ctx[0]); state = env.state(np.zeros(n))[None]
             def observation(s):
                 return proprio(s, tasks.nominal, ctx) if mojia else proprio(s, tasks.nominal, ctx, False)
@@ -138,11 +148,16 @@ def render(a):
                     draw.text((12,8),f'{name} | iteration {cp["iteration"]+1} | {frame*dt:.2f}s\nSolid: policy   Cyan: reference (world coordinates)',font=font,fill='white')
                     writer.append_data(np.asarray(image))
                     if frame == 0: image.save(a.out / (name+'_poster.jpg'))
+                    if frame % 50 == 0:
+                        progress = a.out / 'progress.json'
+                        temp_progress = progress.with_suffix('.tmp')
+                        temp_progress.write_text(json.dumps(dict(clip=name, frames=frame+1, budget=budget)))
+                        temp_progress.replace(progress)
                     first = frame+1
                     future = env.references[clip, torch.arange(first, first+future_count)][None]
-                    if mojia: future=future.to(a.device)
+                    future=future.to(a.device)
                     action = actor(history, future, state).clamp(-20,20)
-                    if mojia: nxt, _ = physics.step(action)
+                    if physics is not None: nxt, _ = physics.step(action)
                     else:
                         target_q = env.nominal + env.scale*action[0].numpy()
                         for _ in range(round(dt/env.control['physics_dt'])):

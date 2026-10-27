@@ -88,3 +88,16 @@ future references t+1..t+10. GPU policy rendering supports `--device cuda:0`;
 GPU evaluation supports `--detailed` keypoint and torso metrics. CPU contact
 trajectories can differ materially from GPU trajectories, especially at reference
 self-penetration. These remaining limitations are documented in the audit.
+
+### 本地模型工作台
+
+```bash
+conda activate mojia_rl
+python scripts/visualize.py studio --port 8765
+```
+
+打开 http://127.0.0.1:8765 。选择机器人、冻结的模型版本和动作，生成实际策略与青色参考叠加的视频。支持 CPU 对照、GPU 训练后端、1080p、限时预览与完整动作。限时没有跌倒不等于整段完成。
+
+模型库在 `checkpoints/library/`，全动作评估优先按完成率、其次按回报推荐；不同机器人不直接排名。只有你在网页点击“确认保留”后，模型才归入 `checkpoints/library/approved/<robot>/<model>/`，附带指纹与评估信息。新保存模型可点击“扫描”。候选模型不自动删除。
+
+接口并发受理：`GET /api/catalog`、`GET /api/jobs`；`POST /api/jobs` 接受 `model_id`、`kind`（`render` / `evaluate`）、`device`（`cpu` / `cuda:0`），播放另含 `motion`、`seconds`（0 为整段）、`height`（720 / 1080）。GPU 工作和渲染串行，训练正在运行时等待；CPU 评估可并行。视频和日志保存在 `runs/studio/jobs/`，服务重启后中断任务可重新提交。
